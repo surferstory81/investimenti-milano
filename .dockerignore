@@ -1,0 +1,5 @@
+.git
+data
+config.json
+__pycache__
+.docker

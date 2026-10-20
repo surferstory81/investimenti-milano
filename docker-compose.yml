@@ -1,6 +1,6 @@
 services:
   investimenti-milano:
-    build: .
+    image: ${IMMAGINE:-investimenti-milano:latest}
     container_name: investimenti-milano
     restart: unless-stopped
     ports:

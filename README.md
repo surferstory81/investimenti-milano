@@ -45,7 +45,12 @@ Se il PC è spento alle 8, la ricerca parte alla prima accensione/login.
 `config.json` e `data/` non sono nel repository: contengono password e dati personali.
 
 ## Docker (es. NAS QNAP con Container Station)
-In `config.json` imposta `"server": {"porta": 8765, "host": "0.0.0.0"}`, poi:
-`docker compose up -d --build`  →  http://IP-DEL-NAS:8765
+Immagine Alpine (Python + Firefox ESR) costruita sul PC e caricata su Docker Hub; config e dati
+restano fuori dall'immagine e si montano come volumi.
+- Build e upload (PC): `podman build -t docker.io/UTENTE/investimenti-milano:latest . && podman push docker.io/UTENTE/investimenti-milano:latest`
+- Sul NAS, nella cartella con `config.json` (con `"server": {"porta": 8765, "host": "0.0.0.0"}`), `data/` e
+  `docker-compose.yml`: `IMMAGINE=UTENTE/investimenti-milano:latest docker compose up -d`  →  http://IP-DEL-NAS:8765
+- Aggiornamento: rifai build e push, poi sul NAS `docker compose pull && docker compose up -d`.
+
 Il container avvia la dashboard e ogni giorno all'orario `report.orario` esegue `run.py --report`
 (in Docker non serve il timer systemd). La dashboard non ha password: non esporla su Internet.
