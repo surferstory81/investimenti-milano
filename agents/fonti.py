@@ -1,0 +1,363 @@
+"""Fonti di annunci usate dall'Agente Ricerca. Ogni fonte restituisce una lista
+di annunci normalizzati con lo stesso schema."""
+import html as htmlmod
+import json
+import re
+import time
+import urllib.parse
+import urllib.request
+
+from .common import http_get, load_json, log, save_json
+
+AGENT = "Ricerca"
+
+
+def _num(x):
+    try:
+        return float(x)
+    except (TypeError, ValueError):
+        return None
+
+
+def _num_it(x):
+    """Numero in formato italiano: '189.000' -> 189000."""
+    return _num(str(x).replace(".", "").replace(",", ".")) if x else None
+
+
+def base_record(**kw):
+    rec = {k: None for k in (
+        "id", "fonte", "url", "titolo", "descrizione", "indirizzo", "data_annuncio",
+        "prezzo", "prezzo_precedente", "mq", "locali", "bagni", "piano", "stato",
+        "classe_energetica", "riscaldamento", "lat", "lon", "inserzionista",
+        "telefono_inserzionista")}
+    rec.update({"arredato": False, "balcone": False, "ascensore": False,
+                "aria_condizionata": False, "agenzia": True, "asta": False,
+                "pin_preciso": False, "immagini": []})
+    rec.update(kw)
+    return rec
+
+
+# --------------------------------------------------------------- Subito.it
+SUBITO = "https://www.subito.it/annunci-lombardia/{tipo}/appartamenti/milano/milano/"
+
+
+def _subito_feat(item, key):
+    f = item.get("features", {}).get(key)
+    if not f or not f.get("values"):
+        return None
+    v = f["values"][0]
+    return v.get("key") if f.get("type") == "number" else v.get("value")
+
+
+def _subito_item(item):
+    mp = (item.get("geo") or {}).get("map") or {}
+    m = re.search(r":(\d+)$", item.get("urn", ""))
+    adv = item.get("advertiser") or {}
+    f = lambda k: _subito_feat(item, k)  # noqa: E731
+    return base_record(
+        id="subito-" + (m.group(1) if m else item.get("urn", "")),
+        fonte="Subito.it",
+        url=(item.get("urls") or {}).get("default"),
+        titolo=item.get("subject"),
+        descrizione=item.get("body", ""),
+        data_annuncio=item.get("date"),
+        prezzo=_num(f("/price")), mq=_num(f("/size")),
+        locali=f("/room"), bagni=f("/bathrooms"), piano=f("/floor"),
+        stato=f("/building_condition"), classe_energetica=f("/energy_class"),
+        riscaldamento=f("/heating"),
+        arredato=f("/furnished") == "Sì", balcone=f("/balcony") == "Sì",
+        ascensore=f("/elevator") == "Sì", aria_condizionata=f("/air_conditioning") == "Sì",
+        lat=_num(mp.get("latitude")), lon=_num(mp.get("longitude")),
+        pin_preciso=bool(mp.get("showPin")),
+        inserzionista=adv.get("name"), agenzia=bool(adv.get("company")),
+        immagini=[i["cdnBaseUrl"] + "?rule=gallery-desktop-1x-auto"
+                  for i in item.get("images", [])[:8] if i.get("cdnBaseUrl")],
+    )
+
+
+def subito(tipo, cfg):
+    r = cfg["ricerca"]
+    params = f"?rs={r['locali_min']}&re={r['locali_max']}"
+    if tipo == "vendita":
+        params += f"&ps={r['prezzo_min']}&pe={r['prezzo_max']}"
+    out, page, pages = [], 1, 1
+    while page <= min(pages, r["max_pagine"]):
+        url = SUBITO.format(tipo=tipo) + params + (f"&o={page}" if page > 1 else "")
+        try:
+            h = http_get(url)
+            m = re.search(r'<script id="__NEXT_DATA__"[^>]*>(.*?)</script>', h, re.S)
+            items = json.loads(m.group(1))["props"]["pageProps"]["initialState"]["items"]
+        except Exception as e:
+            log(AGENT, f"Subito {tipo} pagina {page}: errore {e}")
+            break
+        pages = items.get("totalPages") or 1
+        batch = [_subito_item(i) for i in items.get("originalList", [])
+                 if i.get("kind") == "AdItem"]
+        out.extend(batch)
+        log(AGENT, f"Subito {tipo}: pagina {page}/{pages} → {len(batch)}")
+        page += 1
+    return out
+
+
+# ----------------------------------------------------------------- Casa.it
+CASA = "https://www.casa.it/vendita/residenziale/monolocali/milano/"
+
+
+def _casa_item(x):
+    ft = x.get("features") or {}
+    gi = x.get("geoInfos") or {}
+    pub = x.get("publisher") or {}
+    price = ((ft.get("price") or {}).get("marker") or {}).get("originalPrice")
+    labels = [l.lower() for l in (x.get("labels") or [])]
+    stato = None
+    if any("ristrutturat" in l for l in labels):
+        stato = "Ottimo - ristrutturato"
+    elif any("nuov" in l for l in labels):
+        stato = "Nuovo - in costruzione"
+    elif any("da ristrutturare" in l for l in labels):
+        stato = "Da ristrutturare"
+    via = gi.get("street") if gi.get("show_address") else None
+    zona = ", ".join(z for z in (gi.get("district_name"), gi.get("block_name")) if z)
+    return base_record(
+        id=f"casa-{x['id']}", fonte="Casa.it",
+        url="https://www.casa.it" + x.get("uri", ""),
+        titolo=((x.get("title") or {}).get("main") or "") +
+        (f" — {zona}" if zona else ""),
+        descrizione=(x.get("highlight") or "") + "\n" + (x.get("description") or ""),
+        indirizzo=", ".join(p for p in (via, zona, "Milano") if p),
+        prezzo=_num(price), mq=_num(ft.get("mq")), locali=ft.get("rooms"),
+        bagni=ft.get("bathrooms"), piano=ft.get("level"), stato=stato,
+        classe_energetica=ft.get("energyClass"),
+        lat=_num(gi.get("lat")), lon=_num(gi.get("lon")),
+        pin_preciso=gi.get("geo_visibility_level") == 1 and bool(via),
+        inserzionista=pub.get("publisherName"),
+        telefono_inserzionista=pub.get("publisherPhone"),
+        agenzia=pub.get("publisherType") == "Agency",
+        asta=bool(x.get("isAuction")),
+        immagini=["https://images-1.casa.it/360x265" + m["uri"]
+                  for m in ((x.get("media") or {}).get("items") or [])[:8] if m.get("uri")],
+    )
+
+
+def casa(ff, cfg):
+    r = cfg["ricerca"]
+    out, page, pages = [], 1, 1
+    while page <= min(pages, r["max_pagine"]):
+        url = CASA + (f"?page={page}" if page > 1 else "")
+        try:
+            h = ff.get(url, wait=4)
+            m = re.search(r'window\.__INITIAL_STATE__ = JSON\.parse\((".*?")\);', h, re.S)
+            s = json.loads(json.loads(m.group(1)))["search"]
+        except Exception as e:
+            log(AGENT, f"Casa.it pagina {page}: errore {e}")
+            break
+        pages = s["paginator"]["totalPages"]
+        batch = [_casa_item(x) for x in s.get("list", [])]
+        out.extend(b for b in batch if b["prezzo"] and
+                   r["prezzo_min"] <= b["prezzo"] <= r["prezzo_max"])
+        log(AGENT, f"Casa.it: pagina {page}/{pages} → {len(batch)}")
+        page += 1
+    return out
+
+
+# ---------------------------------------------------------------- Idealista
+IDEALISTA = ("https://www.idealista.it/vendita-case/milano-milano/con-prezzo_{pmax},"
+             "prezzo-min_{pmin},monolocali/")
+
+
+def _text(fragment):
+    return htmlmod.unescape(re.sub(r"<[^>]+>", " ", fragment)).strip()
+
+
+def _idealista_parse(h):
+    out = []
+    for art in re.findall(r'<article class="item[^"]*"[^>]*data-element-id="(\d+)"'
+                          r'[^>]*>(.*?)</article>', h, re.S):
+        eid, body = art
+        t = re.search(r'class="item-link[^"]*" title="([^"]+)"', body)
+        p = re.search(r'class="item-price[^"]*">([\d.]+)', body)
+        if not (t and p):
+            continue
+        det = [_text(d) for d in re.findall(r'<span class="item-detail">(.*?)</span>',
+                                            body, re.S)]
+        mq = next((_num(re.sub(r"[^\d]", "", d)) for d in det if "m²" in d), None)
+        piano = next((d for d in det if "piano" in d.lower()), None)
+        old = re.search(r'pricedown_price">\s*([\d.]+)', body)
+        desc = re.search(r'item-description[^>]*>(.*?)</div>', body, re.S)
+        agz = re.search(r'class="logo-branding">\s*<a [^>]*title="([^"]+)"', body)
+        imgs = re.findall(r'<img src="(https://img\d\.idealista\.it/[^"]+)"', body)
+        title = htmlmod.unescape(t.group(1))
+        out.append(base_record(
+            id=f"idealista-{eid}", fonte="Idealista",
+            url=f"https://www.idealista.it/immobile/{eid}/",
+            titolo=title, descrizione=_text(desc.group(1)) if desc else "",
+            indirizzo=re.sub(r"^\S+ in ", "", title),
+            prezzo=_num_it(p.group(1)), prezzo_precedente=_num_it(old.group(1)) if old else None,
+            mq=mq, locali="1", piano=piano,
+            ascensore=bool(piano and "con ascensore" in piano),
+            inserzionista=htmlmod.unescape(agz.group(1)) if agz else "Privato",
+            agenzia=bool(agz),
+            immagini=[i.replace("/blur/480_360_mq/", "/blur/WEB_LISTING/") for i in imgs[:6]],
+        ))
+    return out
+
+
+def idealista(ff, cfg):
+    r = cfg["ricerca"]
+    base = IDEALISTA.format(pmax=r["prezzo_max"], pmin=r["prezzo_min"])
+    out, page = [], 1
+    while page <= r["max_pagine"]:
+        url = base + (f"pagina-{page}.htm" if page > 1 else "")
+        try:
+            h = ff.get(url, wait=4)
+        except Exception as e:
+            log(AGENT, f"Idealista pagina {page}: errore {e}")
+            break
+        if "captcha" in h[:5000].lower() and "<article" not in h:
+            log(AGENT, "Idealista: richiesta verifica anti-bot, interrompo")
+            break
+        batch = _idealista_parse(h)
+        new = [b for b in batch if b["id"] not in {o["id"] for o in out}]
+        log(AGENT, f"Idealista: pagina {page} → {len(new)}")
+        if not new:
+            break  # oltre l'ultima pagina Idealista ripete l'ultima
+        out.extend(new)
+        if f"pagina-{page + 1}.htm" not in h:
+            break
+        page += 1
+    geocode_all(out)
+    return out
+
+
+# --------------------------------------------- Geocoding (OpenStreetMap)
+def geocode(q, cache):
+    if q in cache:
+        return cache[q]
+    time.sleep(1.1)  # policy Nominatim: max 1 richiesta/s
+    url = ("https://nominatim.openstreetmap.org/search?format=json&limit=1&"
+           "countrycodes=it&q=" + urllib.parse.quote(q))
+    req = urllib.request.Request(url, headers={"User-Agent": "investimenti-milano/1.0"})
+    try:
+        with urllib.request.urlopen(req, timeout=20) as resp:
+            res = json.loads(resp.read())
+        cache[q] = [float(res[0]["lat"]), float(res[0]["lon"])] if res else None
+    except Exception:
+        return None
+    return cache[q]
+
+
+def geocode_all(records):
+    cache = load_json("geocache.json", {})
+    for r in records:
+        if r["lat"] or not r["indirizzo"]:
+            continue
+        parts = [p.strip() for p in r["indirizzo"].split(",")]
+        # prova indirizzo completo, poi via + Milano, poi quartiere + Milano
+        for q in (", ".join(parts), f"{parts[0]}, Milano", f"{parts[-2]}, Milano"
+                  if len(parts) > 2 else None):
+            if not q:
+                continue
+            c = geocode(q, cache)
+            if c and 45.38 < c[0] < 45.56 and 9.04 < c[1] < 9.30:
+                r["lat"], r["lon"] = c
+                r["pin_preciso"] = q == ", ".join(parts) and any(ch.isdigit() for ch in parts[0])
+                break
+    save_json("geocache.json", cache)
+
+
+# ---------------------------------------------------------------- Tecnocasa
+TECNOCASA = "https://www.tecnocasa.it/annunci/immobili/lombardia/milano/milano.html"
+
+
+def _vue_attr(h, name):
+    m = re.search(r' :' + name + r'="([^"]*)"', h)
+    return json.loads(htmlmod.unescape(m.group(1))) if m else None
+
+
+def _tecnocasa_detail(url, base):
+    e = _vue_attr(http_get(url, delay=(1.0, 2.0)), "estate")
+    if not e:
+        return base
+    data = {d["label"]: htmlmod.unescape(str(d["valore"])) for d in e.get("data") or []}
+    ft = e.get("features") or {}
+    ag = e.get("agency") or {}
+    spese = _num_it(re.sub(r"[^\d.,]", "", data.get("Spese Annue", "")))
+    metro = [p for p in (e.get("points_of_interest") or {}).get("public_transport", [])
+             if p.get("subclass") == "subway"]
+    base.update(
+        descrizione=_text(e.get("description") or ""),
+        indirizzo=(data.get("Indirizzo") or e.get("address") or "") + ", Milano",
+        lat=_num(e.get("latitude")), lon=_num(e.get("longitude")),
+        pin_preciso=bool(e.get("publish_map")),
+        data_annuncio=e.get("last_published_at"),
+        mq=_num(e.get("numeric_surface")) or base["mq"],
+        prezzo=_num(e.get("numeric_price")) or base["prezzo"],
+        piano=ft.get("floor"), bagni=data.get("Bagni"),
+        classe_energetica=((e.get("energy_data") or {}).get("class") or "").upper() or None,
+        riscaldamento=ft.get("heating_immo"),
+        arredato=ft.get("furnitured") not in (None, "No", "Non arredato"),
+        balcone=bool(ft.get("balconies")), ascensore=ft.get("elevator_immo") == "Sì",
+        aria_condizionata=ft.get("air_conditioning_immo") not in (None, "No"),
+        inserzionista=f"Tecnocasa — {ag.get('name', '')}".strip(" —"),
+        email_agenzia=ag.get("email"),
+        telefono_inserzionista=ag.get("phone") or ag.get("mobile"),
+        spese_condominio_mese=round(spese / 12) if spese else None,
+        tipo_proprieta=data.get("Tipo proprieta"),
+        libero=ft.get("free"),
+        anno_costruzione=ft.get("build_year"),
+        metro_vicina=f"{metro[0]['name']} ({metro[0]['distance']})" if metro else None,
+    )
+    return base
+
+
+def tecnocasa(cfg, unis_filter):
+    """unis_filter(lat, lon) -> bool: i dettagli si scaricano solo per gli
+    annunci vicini alle università (geocodificati dalla card)."""
+    r = cfg["ricerca"]
+    cards, page, pages, errori = [], 1, 1, 0
+    while page <= min(pages, max(r["max_pagine"], 80)):
+        url = TECNOCASA + (f"/pag-{page}" if page > 1 else "")
+        try:
+            h = http_get(url, delay=(1.0, 2.0))
+            est = _vue_attr(h, "estates") or []
+            pages = (_vue_attr(h, "pagination") or {}).get("total_pages", 1)
+        except Exception as e:
+            log(AGENT, f"Tecnocasa pagina {page}: errore {e}, la salto")
+            errori += 1
+            if errori >= 5:
+                break
+            page += 1
+            continue
+        mono = [x for x in est if "monolocale" in (x.get("title") or "").lower()
+                or ("appartament" in (x.get("detail_url") or "")
+                    and str(x.get("rooms", "")).startswith("1 local")
+                    and not re.search(r"box|posto auto|garage|magazzin|negozio|ufficio",
+                                      (x.get("title") or "").lower()))]
+        cards.extend(mono)
+        if page % 10 == 0 or page == pages:
+            log(AGENT, f"Tecnocasa: pagina {page}/{pages}, monolocali finora {len(cards)}")
+        page += 1
+
+    out = []
+    for x in cards:
+        prezzo = _num_it(re.sub(r"[^\d.]", "", x.get("price") or ""))
+        if not prezzo or not (r["prezzo_min"] <= prezzo <= r["prezzo_max"]):
+            continue
+        rec = base_record(
+            id=f"tecnocasa-{x['id']}", fonte="Tecnocasa", url=x.get("detail_url"),
+            titolo=f"{x.get('title', '')} — {x.get('subtitle', '')}",
+            indirizzo=(x.get("subtitle") or "").replace(" - ", ", "),
+            prezzo=prezzo, prezzo_precedente=_num_it(re.sub(r"[^\d.]", "",
+                                                            x.get("previous_price") or "")),
+            mq=_num(re.sub(r"[^\d]", "", x.get("surface") or "")), locali="1",
+            immagini=[i["url"]["gallery"] for i in (x.get("images") or [])[:8]
+                      if (i.get("url") or {}).get("gallery")],
+        )
+        try:
+            rec = _tecnocasa_detail(rec["url"], rec)
+        except Exception as e:
+            log(AGENT, f"Tecnocasa dettaglio {x['id']}: {e}")
+        out.append(rec)
+    geocode_all(out)
+    log(AGENT, f"Tecnocasa: {len(out)} monolocali nel range di prezzo")
+    return out

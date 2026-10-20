@@ -1,0 +1,381 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Monolocali universitari · Milano</title>
+<style>
+:root{
+  --bg:#f6f5f1; --surface:#fff; --surface-2:#f0eee8; --ink:#1d1d1b; --ink-2:#5c5b56; --ink-3:#8b8a84;
+  --line:#e3e0d8; --accent:#1f5f4a; --accent-ink:#fff; --accent-soft:#e3efe9;
+  --good:#1f7a4d; --warn:#a86a00; --bad:#b23b2e; --good-soft:#e5f3eb; --warn-soft:#fbf0dc; --bad-soft:#f9e6e3;
+  --radius:12px; --shadow:0 1px 2px rgba(0,0,0,.04),0 4px 16px rgba(0,0,0,.04);
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){:root{
+  --bg:#141413; --surface:#1d1d1b; --surface-2:#262624; --ink:#ecebe6; --ink-2:#aeada6; --ink-3:#7d7c76;
+  --line:#33322f; --accent:#5fb393; --accent-ink:#0e1a15; --accent-soft:#1f3229;
+  --good:#6cc596; --warn:#e2a945; --bad:#ef7e70; --good-soft:#1c3026; --warn-soft:#33281a; --bad-soft:#3a201d;
+  --shadow:none; color-scheme:dark;
+}}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;}
+.wrap{max-width:1180px;margin:0 auto;padding:28px 20px 120px}
+a{color:var(--accent)}
+h1{font-size:26px;letter-spacing:-.02em;margin:0}
+h2{font-size:17px;margin:40px 0 12px;letter-spacing:-.01em}
+.muted{color:var(--ink-2)} .small{font-size:12.5px}
+.num{font-variant-numeric:tabular-nums}
+header{display:flex;flex-wrap:wrap;gap:16px;justify-content:space-between;align-items:flex-end;margin-bottom:22px}
+.btn{appearance:none;border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:9px;
+  padding:9px 14px;font:inherit;font-weight:600;cursor:pointer}
+.btn:hover{border-color:var(--ink-3)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.btn:disabled{opacity:.55;cursor:default}
+.status{font-size:12.5px;color:var(--ink-2);margin-top:6px;text-align:right}
+.log{font:11.5px/1.45 ui-monospace,Menlo,monospace;background:var(--surface-2);border-radius:8px;padding:10px 12px;
+  max-height:180px;overflow:auto;white-space:pre-wrap;margin:0 0 18px;color:var(--ink-2)}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin-bottom:8px}
+.kpi{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:14px 16px}
+.kpi b{display:block;font-size:22px;letter-spacing:-.02em}
+.kpi span{font-size:12.5px;color:var(--ink-2)}
+.sources{display:flex;flex-wrap:wrap;gap:6px;margin:12px 0 0}
+.chip{display:inline-flex;align-items:center;gap:5px;font-size:12px;padding:3px 9px;border-radius:99px;
+  background:var(--surface-2);color:var(--ink-2);white-space:nowrap}
+.chip.good{background:var(--good-soft);color:var(--good)} .chip.warn{background:var(--warn-soft);color:var(--warn)}
+.chip.bad{background:var(--bad-soft);color:var(--bad)} .chip.acc{background:var(--accent-soft);color:var(--accent)}
+
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);
+  margin-bottom:12px;overflow:hidden}
+.card.sel{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-soft)}
+.row{display:grid;grid-template-columns:44px 132px 1fr 210px;gap:16px;padding:14px 16px;align-items:start;cursor:pointer}
+.rank{font-size:22px;font-weight:700;color:var(--ink-3);text-align:center;padding-top:4px}
+.thumb{width:132px;aspect-ratio:4/3;border-radius:8px;object-fit:cover;background:var(--surface-2);display:block}
+.title{font-weight:650;font-size:15px;margin:0 0 2px;line-height:1.3}
+.facts{display:flex;flex-wrap:wrap;gap:4px 14px;margin:6px 0 8px;color:var(--ink-2);font-size:13px}
+.facts b{color:var(--ink);font-weight:650}
+.tags{display:flex;flex-wrap:wrap;gap:5px}
+.score{display:flex;flex-direction:column;align-items:flex-end;gap:8px}
+.badge{display:flex;align-items:baseline;gap:8px}
+.badge .n{font-size:28px;font-weight:750;letter-spacing:-.03em}
+.badge .g{font-size:12px;font-weight:650;padding:2px 8px;border-radius:99px}
+.bars{display:grid;grid-template-columns:auto 90px;gap:3px 8px;font-size:11.5px;color:var(--ink-2);width:100%;justify-items:end;align-items:center}
+.bar{width:90px;height:6px;border-radius:3px;background:var(--surface-2);overflow:hidden}
+.bar i{display:block;height:100%;background:var(--accent);border-radius:3px}
+.pick{display:flex;align-items:center;gap:7px;font-size:13px;font-weight:600;cursor:pointer;user-select:none}
+.pick input{width:17px;height:17px;accent-color:var(--accent)}
+.detail{border-top:1px solid var(--line);padding:16px 18px 18px;display:none;background:var(--surface)}
+.card.open .detail{display:block}
+.dgrid{display:grid;grid-template-columns:1.1fr 1fr 1fr;gap:22px}
+.dgrid h4{margin:0 0 8px;font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-3)}
+table.kv{width:100%;border-collapse:collapse;font-size:13px}
+table.kv td{padding:4px 0;border-bottom:1px solid var(--line)}
+table.kv td:last-child{text-align:right;font-variant-numeric:tabular-nums}
+table.kv tr.tot td{font-weight:700;border-bottom:none;padding-top:7px}
+.gallery{display:flex;gap:6px;overflow-x:auto;margin:14px 0 12px;padding-bottom:4px}
+.gallery img{height:120px;border-radius:6px;flex:none}
+.desc{font-size:13px;color:var(--ink-2);white-space:pre-line;max-height:170px;overflow:auto;margin:0}
+ul.pc{margin:0;padding-left:18px;font-size:13px} ul.pc li{margin:2px 0}
+.pro li::marker{color:var(--good)} .con li::marker{color:var(--bad)}
+
+.tablewrap{overflow-x:auto;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius)}
+table.list{width:100%;border-collapse:collapse;font-size:13px;min-width:720px}
+table.list th{text-align:left;font-size:11.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-3);
+  font-weight:600;padding:10px 12px;border-bottom:1px solid var(--line)}
+table.list td{padding:8px 12px;border-bottom:1px solid var(--line);font-variant-numeric:tabular-nums}
+table.list tr:last-child td{border-bottom:none}
+details>summary{cursor:pointer;font-weight:650;margin:28px 0 10px}
+
+.dock{position:fixed;left:0;right:0;bottom:0;padding:12px 20px calc(12px + env(safe-area-inset-bottom,0px));
+  background:var(--surface);border-top:1px solid var(--line);display:flex;justify-content:center;gap:14px;align-items:center;
+  box-shadow:0 -6px 24px rgba(0,0,0,.08)}
+.modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.45);display:flex;align-items:flex-start;justify-content:center;
+  padding:40px 16px;overflow:auto;z-index:10}
+.modal{background:var(--surface);border-radius:14px;max-width:820px;width:100%;padding:22px 22px 18px}
+.modal h3{margin:0 0 4px;font-size:18px}
+.mail{border:1px solid var(--line);border-radius:10px;padding:12px;margin:12px 0}
+.mail label{display:block;font-size:11.5px;color:var(--ink-3);margin:6px 0 2px;text-transform:uppercase;letter-spacing:.05em}
+.mail input,.mail textarea{width:100%;font:inherit;font-size:13px;padding:7px 9px;border:1px solid var(--line);border-radius:7px;
+  background:var(--bg);color:var(--ink)}
+.mail textarea{min-height:200px;font-family:ui-monospace,Menlo,monospace;font-size:12px}
+.note{padding:10px 12px;border-radius:9px;font-size:13px;margin:10px 0}
+.note.warn{background:var(--warn-soft);color:var(--warn)} .note.good{background:var(--good-soft);color:var(--good)}
+.modal-foot{display:flex;justify-content:flex-end;gap:10px;margin-top:14px;flex-wrap:wrap}
+.empty{padding:60px 20px;text-align:center;color:var(--ink-2)}
+@media (max-width:860px){
+  .row{grid-template-columns:34px 1fr;}
+  .row .thumb{display:none}
+  .score{grid-column:1/-1;align-items:stretch}
+  .bars{justify-items:start;grid-template-columns:auto 1fr}.bar{width:100%}
+  .dgrid{grid-template-columns:1fr}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>Monolocali universitari · Milano</h1>
+      <div class="muted" id="sub">Caricamento…</div>
+      <div class="sources" id="sources"></div>
+    </div>
+    <div>
+      <div style="display:flex;gap:8px;justify-content:flex-end">
+        <button class="btn" id="btnVal" title="Ricalcola punteggi senza nuova ricerca">Ricalcola</button>
+        <button class="btn primary" id="btnRun">Nuova ricerca</button>
+      </div>
+      <div class="status" id="status"></div>
+    </div>
+  </header>
+  <pre class="log" id="log" hidden></pre>
+  <section class="kpis" id="kpis"></section>
+
+  <h2>Classifica: i 20 migliori annunci</h2>
+  <p class="muted small" style="margin-top:-6px">Punteggio da investitore 0–100: valore (€/mq rispetto alla zona), rendimento netto stimato,
+    posizione, stato, costi accessori e dimensione. Clicca un annuncio per i dettagli, spunta “Visita” per chiedere un appuntamento.</p>
+  <div id="top"></div>
+
+  <h2>Zone universitarie</h2>
+  <div class="tablewrap"><table class="list" id="zone"></table></div>
+
+  <details><summary id="altriSum">Altri annunci valutati</summary>
+    <div class="tablewrap"><table class="list" id="altri"></table></div></details>
+  <details><summary id="scartSum">Annunci scartati</summary>
+    <div class="tablewrap"><table class="list" id="scartati"></table></div></details>
+
+  <p class="muted small" style="margin-top:36px">Stime indicative: il canone è il 40° percentile degli affitti di taglio simile nella stessa zona, ridotto dell'8% per prudenza;
+    imposte, IMU e lavori sono stime parametriche modificabili in <code>config.json</code>. Verificare sempre visura, planimetria e APE prima di un'offerta.</p>
+</div>
+
+<div class="dock" id="dock" hidden>
+  <span id="dockTxt"></span>
+  <button class="btn" id="btnClear">Deseleziona</button>
+  <button class="btn primary" id="btnMail">Richiedi appuntamento →</button>
+</div>
+<div class="modal-bg" id="modal" hidden></div>
+
+<script>
+const $ = s => document.querySelector(s);
+const eur = n => n == null ? "—" : new Intl.NumberFormat("it-IT",{style:"currency",currency:"EUR",maximumFractionDigits:0}).format(n);
+const fmt = n => n == null ? "—" : new Intl.NumberFormat("it-IT",{maximumFractionDigits:1}).format(n);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const dt = s => s ? new Date(s).toLocaleString("it-IT",{dateStyle:"medium",timeStyle:"short"}) : "—";
+let D = null, SEL = new Set(), OPEN = new Set(), wasRunning = false;
+
+const LABELS = {valore:"Valore",rendimento:"Rendimento",posizione:"Posizione",stato:"Stato",costi:"Costi",dimensione:"Dimensione"};
+const gClass = g => ({"Ottimo affare":"good","Interessante":"acc","Nella media":"warn"}[g] || "bad");
+
+async function load(){
+  const r = await fetch("/api/dati"); D = await r.json();
+  SEL = new Set(D.selezione || []);
+  render();
+}
+
+function render(){
+  const c = D.classifica;
+  if(!c){ $("#top").innerHTML = `<div class="empty">Nessun dato ancora. Premi <b>Nuova ricerca</b> per avviare gli agenti.</div>`; $("#sub").textContent=""; return; }
+  $("#sub").textContent = `Aggiornato ${dt(c.aggiornato)} · ${c.totale_valutati} monolocali valutati vicino agli atenei`;
+  $("#sources").innerHTML = Object.entries(c.per_fonte||{}).map(([k,v]) =>
+    `<span class="chip ${v? "":"warn"}">${esc(k)}: ${v ? v + " annunci" : "non disponibile"}</span>`).join("");
+  const top = c.top;
+  const avg = f => top.length ? top.reduce((s,a)=>s+f(a),0)/top.length : null;
+  $("#kpis").innerHTML = [
+    [c.totale_valutati, "annunci valutati"],
+    [fmt(top[0]?.valutazione.punteggio), "punteggio migliore"],
+    [fmt(avg(a=>a.valutazione.rendimento_netto)) + "%", "rendimento netto medio top 20"],
+    [eur(avg(a=>a.prezzo)), "prezzo medio top 20"],
+    [top.filter(a=>a.nuovo_in_top).length, "nuovi in classifica"],
+  ].map(([b,s])=>`<div class="kpi"><b class="num">${b}</b><span>${s}</span></div>`).join("");
+
+  $("#top").innerHTML = top.map(card).join("");
+  document.querySelectorAll(".card").forEach(el => {
+    el.querySelector(".row").addEventListener("click", e => {
+      if (e.target.closest(".pick") || e.target.closest("a")) return;
+      el.classList.toggle("open");
+      OPEN.has(el.dataset.id) ? OPEN.delete(el.dataset.id) : OPEN.add(el.dataset.id);
+    });
+    el.querySelector(".pick input").addEventListener("change", e => toggleSel(el.dataset.id, e.target.checked));
+  });
+
+  $("#zone").innerHTML = `<tr><th>Zona (ateneo più vicino)</th><th>Annunci</th><th>€/mq vendita (mediana)</th><th>Canone mediano</th><th>€/mq affitto</th><th>Rend. lordo indicativo</th></tr>` +
+    Object.entries(c.zone).sort((a,b)=>b[1].annunci-a[1].annunci).map(([z,v]) =>
+      `<tr><td>${esc(z)}</td><td>${v.annunci}</td><td>${eur(v.mediana_eur_mq)}</td><td>${eur(v.canone_mediano)}/mese</td><td>${fmt(v.canone_eur_mq)} €</td>
+       <td>${v.canone_eur_mq ? fmt(v.canone_eur_mq*12/v.mediana_eur_mq*100)+"%" : "—"}</td></tr>`).join("");
+
+  $("#altriSum").textContent = `Altri annunci valutati (${c.altri.length})`;
+  $("#altri").innerHTML = `<tr><th>#</th><th>Annuncio</th><th>Prezzo</th><th>mq</th><th>€/mq</th><th>Rend. netto</th><th>Punteggio</th><th>Visita</th></tr>` +
+    c.altri.map(a => `<tr><td>${a.posizione_classifica}</td><td><a href="${esc(a.url)}" target="_blank" rel="noopener">${esc(a.titolo)}</a>
+      <div class="small muted">${esc(a.fonte)} · ${esc(a.zona_universitaria)} ${fmt(a.distanza_uni_km)} km</div></td>
+      <td>${eur(a.prezzo)}</td><td>${fmt(a.mq)}</td><td>${eur(a.prezzo_mq)}</td><td>${fmt(a.valutazione.rendimento_netto)}%</td>
+      <td><b>${fmt(a.valutazione.punteggio)}</b></td>
+      <td><input type="checkbox" data-alt="${esc(a.id)}" ${SEL.has(a.id)?"checked":""}></td></tr>`).join("");
+  document.querySelectorAll("[data-alt]").forEach(i => i.addEventListener("change", e => toggleSel(i.dataset.alt, e.target.checked)));
+
+  $("#scartSum").textContent = `Annunci scartati (${c.scartati.length})`;
+  $("#scartati").innerHTML = `<tr><th>Annuncio</th><th>Motivo</th></tr>` + c.scartati.map(s =>
+    `<tr><td>${s.url ? `<a href="${esc(s.url)}" target="_blank" rel="noopener">${esc(s.titolo||s.id)}</a>` : esc(s.id)}</td><td>${esc(s.motivo)}</td></tr>`).join("");
+  dock();
+}
+
+function emailBadge(id){
+  const e = D.email?.[id]; if(!e) return "";
+  return e.stato === "inviata" ? `<span class="chip good">Email inviata ${dt(e.data)}</span>`
+                               : `<span class="chip warn">Bozza salvata ${dt(e.data)}</span>`;
+}
+
+function card(a){
+  const v = a.valutazione, p = v.punteggi, ca = v.costi_acquisto;
+  const img = a.immagini?.[0];
+  const tags = [
+    a.nuovo_in_top ? `<span class="chip acc">Nuovo in classifica</span>` : "",
+    emailBadge(a.id),
+    ...v.pro.slice(0,4).map(t=>`<span class="chip good">${esc(t)}</span>`),
+    ...v.contro.slice(0,3).map(t=>`<span class="chip bad">${esc(t)}</span>`),
+  ].join("");
+  const storico = (a.storico_prezzi||[]).length > 1 ? a.storico_prezzi.map(s=>`${dt(s.data)}: ${eur(s.prezzo)}`).join("<br>") : "";
+  return `<article class="card ${SEL.has(a.id)?"sel":""} ${OPEN.has(a.id)?"open":""}" data-id="${esc(a.id)}">
+  <div class="row">
+    <div class="rank num">${a.posizione_classifica}</div>
+    ${img ? `<img class="thumb" src="${esc(img)}" alt="" loading="lazy" referrerpolicy="no-referrer">` : `<div class="thumb"></div>`}
+    <div>
+      <p class="title">${esc(a.titolo)}</p>
+      <div class="small muted">${esc(a.indirizzo || "")} ${a.indirizzo ? "· " : ""}${esc(a.fonte)}${a.altre_fonti ? " + " + a.altre_fonti.map(f=>esc(f.fonte)).join(", ") : ""} · ${esc(a.inserzionista || "")}</div>
+      <div class="facts">
+        <span><b>${eur(a.prezzo)}</b></span><span><b>${fmt(a.mq)}</b> mq</span>
+        <span><b>${eur(a.prezzo_mq)}</b>/mq <span class="${v.sconto_vs_zona_pct>=0?"":"muted"}">(${v.sconto_vs_zona_pct>=0?"−":"+"}${fmt(Math.abs(v.sconto_vs_zona_pct))}% vs zona)</span></span>
+        <span>Affitto stimato <b>${eur(v.canone_stimato)}</b>/mese</span>
+        <span>Rend. netto <b>${fmt(v.rendimento_netto)}%</b></span>
+        <span><b>${fmt(a.distanza_uni_km)} km</b> da ${esc(a.zona_universitaria)}</span>
+      </div>
+      <div class="tags">${tags}</div>
+    </div>
+    <div class="score">
+      <div class="badge"><span class="g chip ${gClass(v.giudizio)}">${esc(v.giudizio)}</span><span class="n num">${fmt(v.punteggio)}</span></div>
+      <div class="bars">${Object.keys(LABELS).map(k=>`<span>${LABELS[k]}</span><span class="bar"><i style="width:${p[k]}%"></i></span>`).join("")}</div>
+      <label class="pick"><input type="checkbox" ${SEL.has(a.id)?"checked":""}> Visita</label>
+    </div>
+  </div>
+  <div class="detail">
+    <div class="dgrid">
+      <div>
+        <h4>Investimento</h4>
+        <table class="kv">
+          <tr><td>Prezzo richiesto</td><td>${eur(a.prezzo)}</td></tr>
+          <tr><td>Agenzia (3% + IVA)</td><td>${eur(ca.agenzia)}</td></tr>
+          <tr><td>Imposte acquisto (stima)</td><td>${eur(ca.imposte)}</td></tr>
+          <tr><td>Notaio</td><td>${eur(ca.notaio)}</td></tr>
+          <tr><td>Lavori (stato: ${esc(a.stato_norm)})</td><td>${eur(ca.lavori)}</td></tr>
+          <tr><td>Arredo</td><td>${eur(ca.arredo)}</td></tr>
+          <tr class="tot"><td>Investimento totale</td><td>${eur(v.investimento_totale)}</td></tr>
+        </table>
+      </div>
+      <div>
+        <h4>Reddito annuo stimato</h4>
+        <table class="kv">
+          <tr><td>Canone mensile</td><td>${eur(v.canone_stimato)}</td></tr>
+          <tr><td class="small muted" colspan="2" style="text-align:left">${esc(v.metodo_canone)} (${fmt(v.canone_eur_mq)} €/mq)</td></tr>
+          <tr><td>Spese condominio</td><td>${eur(v.spese_condominio_mese)}/mese${v.spese_stimate?" <span class='muted'>(stima)</span>":""}</td></tr>
+          <tr><td>IMU + tasse + assicurazione</td><td>${eur(v.costi_annui)}</td></tr>
+          <tr><td>Rendimento lordo</td><td>${fmt(v.rendimento_lordo)}%</td></tr>
+          <tr class="tot"><td>Netto annuo · rend. netto</td><td>${eur(v.netto_annuo)} · ${fmt(v.rendimento_netto)}%</td></tr>
+        </table>
+      </div>
+      <div>
+        <h4>Immobile</h4>
+        <table class="kv">
+          <tr><td>Stato</td><td>${esc(a.stato || a.stato_norm)}</td></tr>
+          <tr><td>Piano</td><td>${esc(a.piano || "—")}</td></tr>
+          <tr><td>Classe energetica</td><td>${esc(a.classe_energetica || "—")}</td></tr>
+          <tr><td>Riscaldamento</td><td>${esc(a.riscaldamento || "—")}</td></tr>
+          <tr><td>Arredato · Ascensore</td><td>${a.arredato?"Sì":"No"} · ${a.ascensore?"Sì":"No"}</td></tr>
+          ${a.metro_vicina ? `<tr><td>Metro</td><td>${esc(a.metro_vicina)}</td></tr>` : ""}
+          <tr><td>Atenei vicini</td><td>${a.universita_vicine.map(u=>`${esc(u.nome)} ${fmt(u.km)} km`).join("<br>")}</td></tr>
+          <tr><td>Contatto</td><td>${a.email ? esc(a.email) : "<span class='muted'>email non presente</span>"}${a.telefono ? "<br>"+esc(a.telefono) : ""}</td></tr>
+          ${storico ? `<tr><td>Storico prezzi</td><td>${storico}</td></tr>` : ""}
+        </table>
+      </div>
+    </div>
+    ${a.immagini?.length > 1 ? `<div class="gallery">${a.immagini.map(i=>`<img src="${esc(i)}" alt="" loading="lazy" referrerpolicy="no-referrer">`).join("")}</div>` : ""}
+    <div class="dgrid" style="grid-template-columns:2fr 1fr 1fr;margin-top:12px">
+      <div><h4>Descrizione</h4><p class="desc">${esc(a.descrizione)}</p></div>
+      <div><h4>Punti di forza</h4><ul class="pc pro">${v.pro.map(t=>`<li>${esc(t)}</li>`).join("") || "<li>—</li>"}</ul></div>
+      <div><h4>Criticità</h4><ul class="pc con">${v.contro.map(t=>`<li>${esc(t)}</li>`).join("") || "<li>—</li>"}</ul>
+        <p style="margin-top:14px"><a href="${esc(a.url)}" target="_blank" rel="noopener">Apri l'annuncio su ${esc(a.fonte)} ↗</a></p></div>
+    </div>
+  </div>
+</article>`;
+}
+
+async function toggleSel(id, on){
+  on ? SEL.add(id) : SEL.delete(id);
+  document.querySelector(`.card[data-id="${CSS.escape(id)}"]`)?.classList.toggle("sel", on);
+  await fetch("/api/selezione",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({ids:[...SEL]})});
+  dock();
+}
+function dock(){
+  $("#dock").hidden = SEL.size === 0;
+  $("#dockTxt").textContent = `${SEL.size} monolocal${SEL.size===1?"e":"i"} selezionat${SEL.size===1?"o":"i"}`;
+}
+$("#btnClear").onclick = async () => { SEL.clear(); await fetch("/api/selezione",{method:"POST",headers:{"Content-Type":"application/json"},body:'{"ids":[]}'}); render(); };
+
+$("#btnMail").onclick = async () => {
+  const r = await fetch("/api/anteprima-email",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({ids:[...SEL]})});
+  const {bozze} = await r.json();
+  const m = $("#modal"); m.hidden = false;
+  const conEmail = bozze.filter(b=>b.a).length;
+  m.innerHTML = `<div class="modal">
+    <h3>Richiesta appuntamento</h3>
+    <p class="muted small">Controlla e modifica le email: verranno inviate solo dopo la tua conferma.</p>
+    ${D.smtp_attivo ? `<div class="note good">Invio attivo dal tuo account email (riceverai una copia in Ccn).</div>`
+      : `<div class="note warn">Invio SMTP non configurato: le email verranno salvate come bozze in <code>data/bozze/</code>. Per l'invio reale imposta <code>email.abilitato</code> e <code>email.password_app</code> in <code>config.json</code>.</div>`}
+    ${bozze.map((b,i)=>`<div class="mail" data-i="${i}">
+      <b>${esc(b.titolo)}</b><div class="small muted">${esc(b.inserzionista||"")} · <a href="${esc(b.url)}" target="_blank" rel="noopener">annuncio</a>${b.telefono?" · tel. "+esc(b.telefono):""}</div>
+      ${b.a ? "" : `<div class="note warn">Email dell'agenzia non trovata nell'annuncio: inseriscila qui sotto oppure contatta tramite il portale${b.telefono?" o al "+esc(b.telefono):""}.</div>`}
+      <label>A</label><input class="f-a" value="${esc(b.a||"")}" placeholder="email agenzia">
+      <label>Oggetto</label><input class="f-o" value="${esc(b.oggetto)}">
+      <label>Testo</label><textarea class="f-c">${esc(b.corpo)}</textarea>
+    </div>`).join("")}
+    <div class="modal-foot">
+      <button class="btn" id="mClose">Annulla</button>
+      <button class="btn primary" id="mSend">${D.smtp_attivo ? "Conferma e invia" : "Salva bozze"} (${conEmail})</button>
+    </div></div>`;
+  const updateCount = () => { const n=[...m.querySelectorAll(".f-a")].filter(i=>i.value.trim()).length;
+    $("#mSend").textContent = `${D.smtp_attivo ? "Conferma e invia" : "Salva bozze"} (${n})`; $("#mSend").disabled = n===0; };
+  m.querySelectorAll(".f-a").forEach(i=>i.addEventListener("input",updateCount)); updateCount();
+  $("#mClose").onclick = () => m.hidden = true;
+  $("#mSend").onclick = async () => {
+    const out = [...m.querySelectorAll(".mail")].map((el)=>({id:bozze[el.dataset.i].id, a:el.querySelector(".f-a").value.trim(),
+      oggetto:el.querySelector(".f-o").value, corpo:el.querySelector(".f-c").value})).filter(b=>b.a);
+    $("#mSend").disabled = true; $("#mSend").textContent = "Invio in corso…";
+    const res = await (await fetch("/api/invia-email",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({conferma:true,bozze:out})})).json();
+    const ok = (res.esiti||[]).filter(e=>e.esito==="inviata"||e.esito==="bozza").length;
+    const err = (res.esiti||[]).filter(e=>e.esito==="errore").map(e=>e.messaggio).join("; ");
+    m.querySelector(".modal").innerHTML = `<h3>${res.smtp_attivo ? ok+" email inviate" : ok+" bozze salvate"}</h3>
+      ${err ? `<div class="note warn">${esc(err)}</div>` : ""}
+      <div class="modal-foot"><button class="btn primary" id="mDone">Chiudi</button></div>`;
+    $("#mDone").onclick = () => { m.hidden = true; load(); };
+  };
+};
+
+async function run(solo){
+  await fetch("/api/ricerca",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({solo_valuta:solo})});
+  poll();
+}
+$("#btnRun").onclick = () => run(false);
+$("#btnVal").onclick = () => run(true);
+
+async function poll(){
+  const s = await (await fetch("/api/stato")).json();
+  $("#btnRun").disabled = $("#btnVal").disabled = s.in_corso;
+  $("#log").hidden = !s.in_corso;
+  $("#log").textContent = s.log.join("\n"); $("#log").scrollTop = 1e9;
+  $("#status").textContent = s.in_corso ? "Agenti al lavoro…" : s.errore ? "Errore: " + s.errore : "";
+  if (wasRunning && !s.in_corso) load();
+  wasRunning = s.in_corso;
+  if (s.in_corso) setTimeout(poll, 2000);
+}
+load(); poll();
+</script>
+</body>
+</html>

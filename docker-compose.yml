@@ -1,0 +1,11 @@
+services:
+  investimenti-milano:
+    build: .
+    container_name: investimenti-milano
+    restart: unless-stopped
+    ports:
+      - "8765:8765"
+    volumes:
+      - ./config.json:/app/config.json
+      - ./data:/app/data
+    shm_size: "1gb"

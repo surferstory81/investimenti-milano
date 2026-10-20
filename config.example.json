@@ -1,0 +1,126 @@
+{
+  "ricerca": {
+    "locali_min": 1,
+    "locali_max": 1,
+    "prezzo_min": 60000,
+    "prezzo_max": 350000,
+    "mq_min": 18,
+    "max_pagine": 40,
+    "raggio_universita_km": 1.6,
+    "fonti": [
+      "subito",
+      "tecnocasa",
+      "casa",
+      "idealista"
+    ]
+  },
+  "universita": [
+    {
+      "nome": "Politecnico - Leonardo",
+      "zona": "Città Studi",
+      "lat": 45.4781,
+      "lon": 9.2272
+    },
+    {
+      "nome": "Statale - Città Studi (Celoria)",
+      "zona": "Città Studi",
+      "lat": 45.4766,
+      "lon": 9.2316
+    },
+    {
+      "nome": "Statale - Festa del Perdono",
+      "zona": "Centro / Statale",
+      "lat": 45.4601,
+      "lon": 9.1946
+    },
+    {
+      "nome": "Bocconi",
+      "zona": "Bocconi / Porta Romana",
+      "lat": 45.4504,
+      "lon": 9.1897
+    },
+    {
+      "nome": "Cattolica",
+      "zona": "Sant'Ambrogio",
+      "lat": 45.4627,
+      "lon": 9.1772
+    },
+    {
+      "nome": "Bicocca",
+      "zona": "Bicocca",
+      "lat": 45.5137,
+      "lon": 9.211
+    },
+    {
+      "nome": "Politecnico - Bovisa",
+      "zona": "Bovisa",
+      "lat": 45.5027,
+      "lon": 9.1561
+    },
+    {
+      "nome": "IULM",
+      "zona": "Romolo / Barona",
+      "lat": 45.4497,
+      "lon": 9.1557
+    },
+    {
+      "nome": "Accademia di Brera",
+      "zona": "Brera",
+      "lat": 45.4719,
+      "lon": 9.188
+    },
+    {
+      "nome": "San Raffaele (Vita-Salute)",
+      "zona": "Olgettina",
+      "lat": 45.5055,
+      "lon": 9.265
+    }
+  ],
+  "costi": {
+    "agenzia_pct": 3.0,
+    "iva_agenzia_pct": 22,
+    "imposte_acquisto_pct_prezzo": 3.2,
+    "notaio_eur": 2500,
+    "ristrutturazione_eur_mq": {
+      "da ristrutturare": 900,
+      "buono": 250,
+      "ottimo": 0,
+      "nuovo": 0,
+      "sconosciuto": 300
+    },
+    "arredo_eur": 5000,
+    "spese_condominio_mese_default": 80,
+    "imu_pct_prezzo": 0.35,
+    "assicurazione_anno_eur": 200,
+    "tassazione_affitto_pct": 21,
+    "sfitto_pct": 8,
+    "affitto_eur_mq_default": 26
+  },
+  "pesi": {
+    "valore": 22,
+    "rendimento": 22,
+    "posizione": 20,
+    "stato": 14,
+    "costi": 12,
+    "dimensione": 10
+  },
+  "email": {
+    "abilitato": false,
+    "smtp_host": "smtp.gmail.com",
+    "smtp_port": 465,
+    "utente": "tuo.indirizzo@gmail.com",
+    "password_app": "",
+    "mittente_nome": "Nome Cognome",
+    "telefono": "",
+    "firma": "Cordiali saluti,\nNome Cognome"
+  },
+  "server": {
+    "porta": 8765
+  },
+  "report": {
+    "destinatari": [
+      "tuo.indirizzo@gmail.com"
+    ],
+    "orario": "08:00"
+  }
+}
