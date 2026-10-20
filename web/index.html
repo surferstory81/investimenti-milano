@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Monolocali universitari · Milano</title>
+<title>Mono e bilocali · Milano</title>
 <style>
 :root{
   --bg:#f6f5f1; --surface:#fff; --surface-2:#f0eee8; --ink:#1d1d1b; --ink-2:#5c5b56; --ink-3:#8b8a84;
@@ -116,7 +116,7 @@ details>summary{cursor:pointer;font-weight:650;margin:28px 0 10px}
 <div class="wrap">
   <header>
     <div>
-      <h1>Monolocali universitari · Milano</h1>
+      <h1>Mono e bilocali universitari · Milano</h1>
       <div class="muted" id="sub">Caricamento…</div>
       <div class="sources" id="sources"></div>
     </div>
@@ -175,7 +175,7 @@ async function load(){
 function render(){
   const c = D.classifica;
   if(!c){ $("#top").innerHTML = `<div class="empty">Nessun dato ancora. Premi <b>Nuova ricerca</b> per avviare gli agenti.</div>`; $("#sub").textContent=""; return; }
-  $("#sub").textContent = `Aggiornato ${dt(c.aggiornato)} · ${c.totale_valutati} monolocali valutati vicino agli atenei`;
+  $("#sub").textContent = `Aggiornato ${dt(c.aggiornato)} · ${c.totale_valutati} immobili valutati vicino agli atenei`;
   $("#sources").innerHTML = Object.entries(c.per_fonte||{}).map(([k,v]) =>
     `<span class="chip ${v? "":"warn"}">${esc(k)}: ${v ? v + " annunci" : "non disponibile"}</span>`).join("");
   const top = c.top;
@@ -315,7 +315,7 @@ async function toggleSel(id, on){
 }
 function dock(){
   $("#dock").hidden = SEL.size === 0;
-  $("#dockTxt").textContent = `${SEL.size} monolocal${SEL.size===1?"e":"i"} selezionat${SEL.size===1?"o":"i"}`;
+  $("#dockTxt").textContent = `${SEL.size} immobil${SEL.size===1?"e":"i"} selezionat${SEL.size===1?"o":"i"}`;
 }
 $("#btnClear").onclick = async () => { SEL.clear(); await fetch("/api/selezione",{method:"POST",headers:{"Content-Type":"application/json"},body:'{"ids":[]}'}); render(); };
 

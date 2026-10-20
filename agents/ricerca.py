@@ -1,4 +1,4 @@
-"""AGENTE RICERCA: cerca monolocali in vendita su più portali e annunci d'affitto (per stimare i canoni). Tiene solo quelli vicini
+"""AGENTE RICERCA: cerca monolocali e bilocali in vendita su più portali e annunci d'affitto (per stimare i canoni). Tiene solo quelli vicini
 alle università di Milano.
 
 Fonti: Subito.it e Tecnocasa (HTTP diretto), Casa.it e Idealista (Firefox
@@ -66,7 +66,7 @@ def run():
     save_json("grezzi.json", {"aggiornato": now, "vendita": vicini,
                               "vendita_tot_milano": len(vendita),
                               "per_fonte": per_fonte, "affitto": affitto})
-    log(AGENT, f"totale {len(vendita)} monolocali in vendita ({per_fonte}); "
+    log(AGENT, f"totale {len(vendita)} immobili in vendita ({per_fonte}); "
                f"{len(vicini)} entro {raggio} km da un'università; "
                f"{len(affitto)} affitti per i canoni")
     return len(vicini)

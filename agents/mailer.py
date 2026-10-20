@@ -1,4 +1,4 @@
-"""AGENTE EMAIL: per i monolocali che hai confermato sulla pagina web, scrive
+"""AGENTE EMAIL: per gli immobili che hai confermato sulla pagina web, scrive
 all'agenzia per chiedere un appuntamento. Invia solo dopo la tua conferma
 esplicita; senza credenziali SMTP salva le email come bozze (.eml)."""
 import smtplib
@@ -30,7 +30,8 @@ def _eur(x):
 def componi(a, cfg):
     e = cfg["email"]
     ind = a.get("indirizzo") or a.get("titolo")
-    oggetto = f"Richiesta appuntamento — monolocale {ind} ({_eur(a['prezzo'])})"
+    tipo = "bilocale" if str(a.get("locali") or "1") == "2" else "monolocale"
+    oggetto = f"Richiesta appuntamento — {tipo} {ind} ({_eur(a['prezzo'])})"
     tel = f"\nPuò contattarmi anche al {e['telefono']}." if e.get("telefono") else ""
     corpo = f"""Buongiorno,
 

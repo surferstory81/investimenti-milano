@@ -1,7 +1,7 @@
 {
   "ricerca": {
     "locali_min": 1,
-    "locali_max": 1,
+    "locali_max": 2,
     "prezzo_min": 60000,
     "prezzo_max": 350000,
     "mq_min": 18,

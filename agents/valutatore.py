@@ -6,7 +6,7 @@ compra per affittare a studenti. Sei criteri (0-100), pesati da config.json:
   posizione   distanza dall'università, numero di atenei vicini, metro
   stato       condizioni dell'immobile + classe energetica
   costi       costi accessori d'acquisto e spese ricorrenti
-  dimensione  taglio ideale per l'affitto a studenti (28-40 mq)
+  dimensione  taglio ideale per l'affitto a studenti (monolocale 28-40 mq, bilocale 40-60)
 """
 from datetime import datetime
 
@@ -111,12 +111,13 @@ def valuta(a, ctx, cfg):
     s_costi = clamp(lin(acc_pct, 22, 6) * 0.6 + lin(spese_mese, 220, 50) * 0.4)
 
     mq = a["mq"]
-    if 28 <= mq <= 40:
+    lo, hi = (40, 60) if str(a.get("locali") or "1") == "2" else (28, 40)
+    if lo <= mq <= hi:
         s_dim = 100
-    elif mq < 28:
-        s_dim = clamp(100 - (28 - mq) * 8)
+    elif mq < lo:
+        s_dim = clamp(100 - (lo - mq) * 8)
     else:
-        s_dim = clamp(100 - (mq - 40) * 4)
+        s_dim = clamp(100 - (mq - hi) * 4)
 
     pesi = cfg["pesi"]
     punteggi = {"valore": s_valore, "rendimento": s_rend, "posizione": s_pos,

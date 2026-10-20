@@ -100,8 +100,17 @@ def subito(tipo, cfg):
     return out
 
 
+TIPOLOGIE = {1: "monolocali", 2: "bilocali", 3: "trilocali"}
+
+
+def tipologie(r):
+    """[(n. locali, "monolocali"), ...] richiesti da ricerca.locali_min/max."""
+    return [(n, TIPOLOGIE[n]) for n in range(r["locali_min"], r["locali_max"] + 1)
+            if n in TIPOLOGIE]
+
+
 # ----------------------------------------------------------------- Casa.it
-CASA = "https://www.casa.it/vendita/residenziale/monolocali/milano/"
+CASA = "https://www.casa.it/vendita/residenziale/{tipo}/milano/"
 
 
 def _casa_item(x):
@@ -142,35 +151,39 @@ def _casa_item(x):
 
 def casa(ff, cfg):
     r = cfg["ricerca"]
-    out, page, pages = [], 1, 1
-    while page <= min(pages, r["max_pagine"]):
-        url = CASA + (f"?page={page}" if page > 1 else "")
-        try:
-            h = ff.get(url, wait=4)
-            m = re.search(r'window\.__INITIAL_STATE__ = JSON\.parse\((".*?")\);', h, re.S)
-            s = json.loads(json.loads(m.group(1)))["search"]
-        except Exception as e:
-            log(AGENT, f"Casa.it pagina {page}: errore {e}")
-            break
-        pages = s["paginator"]["totalPages"]
-        batch = [_casa_item(x) for x in s.get("list", [])]
-        out.extend(b for b in batch if b["prezzo"] and
-                   r["prezzo_min"] <= b["prezzo"] <= r["prezzo_max"])
-        log(AGENT, f"Casa.it: pagina {page}/{pages} → {len(batch)}")
-        page += 1
+    out = []
+    for n, tipo in tipologie(r):
+        page, pages = 1, 1
+        while page <= min(pages, r["max_pagine"]):
+            url = CASA.format(tipo=tipo) + (f"?page={page}" if page > 1 else "")
+            try:
+                h = ff.get(url, wait=4)
+                m = re.search(r'window\.__INITIAL_STATE__ = JSON\.parse\((".*?")\);', h, re.S)
+                s = json.loads(json.loads(m.group(1)))["search"]
+            except Exception as e:
+                log(AGENT, f"Casa.it {tipo} pagina {page}: errore {e}")
+                break
+            pages = s["paginator"]["totalPages"]
+            batch = [_casa_item(x) for x in s.get("list", [])]
+            for b in batch:
+                b["locali"] = b["locali"] or str(n)
+            out.extend(b for b in batch if b["prezzo"] and
+                       r["prezzo_min"] <= b["prezzo"] <= r["prezzo_max"])
+            log(AGENT, f"Casa.it {tipo}: pagina {page}/{pages} → {len(batch)}")
+            page += 1
     return out
 
 
 # ---------------------------------------------------------------- Idealista
 IDEALISTA = ("https://www.idealista.it/vendita-case/milano-milano/con-prezzo_{pmax},"
-             "prezzo-min_{pmin},monolocali/")
+             "prezzo-min_{pmin},{tipo}/")
 
 
 def _text(fragment):
     return htmlmod.unescape(re.sub(r"<[^>]+>", " ", fragment)).strip()
 
 
-def _idealista_parse(h):
+def _idealista_parse(h, locali="1"):
     out = []
     for art in re.findall(r'<article class="item[^"]*"[^>]*data-element-id="(\d+)"'
                           r'[^>]*>(.*?)</article>', h, re.S):
@@ -194,7 +207,7 @@ def _idealista_parse(h):
             titolo=title, descrizione=_text(desc.group(1)) if desc else "",
             indirizzo=re.sub(r"^\S+ in ", "", title),
             prezzo=_num_it(p.group(1)), prezzo_precedente=_num_it(old.group(1)) if old else None,
-            mq=mq, locali="1", piano=piano,
+            mq=mq, locali=locali, piano=piano,
             ascensore=bool(piano and "con ascensore" in piano),
             inserzionista=htmlmod.unescape(agz.group(1)) if agz else "Privato",
             agenzia=bool(agz),
@@ -205,27 +218,30 @@ def _idealista_parse(h):
 
 def idealista(ff, cfg):
     r = cfg["ricerca"]
-    base = IDEALISTA.format(pmax=r["prezzo_max"], pmin=r["prezzo_min"])
-    out, page = [], 1
-    while page <= r["max_pagine"]:
-        url = base + (f"pagina-{page}.htm" if page > 1 else "")
-        try:
-            h = ff.get(url, wait=4)
-        except Exception as e:
-            log(AGENT, f"Idealista pagina {page}: errore {e}")
-            break
-        if "captcha" in h[:5000].lower() and "<article" not in h:
-            log(AGENT, "Idealista: richiesta verifica anti-bot, interrompo")
-            break
-        batch = _idealista_parse(h)
-        new = [b for b in batch if b["id"] not in {o["id"] for o in out}]
-        log(AGENT, f"Idealista: pagina {page} → {len(new)}")
-        if not new:
-            break  # oltre l'ultima pagina Idealista ripete l'ultima
-        out.extend(new)
-        if f"pagina-{page + 1}.htm" not in h:
-            break
-        page += 1
+    out = []
+    for n, tipo in tipologie(r):
+        base = IDEALISTA.format(pmax=r["prezzo_max"], pmin=r["prezzo_min"], tipo=tipo)
+        page = 1
+        while page <= r["max_pagine"]:
+            url = base + (f"pagina-{page}.htm" if page > 1 else "")
+            try:
+                h = ff.get(url, wait=4)
+            except Exception as e:
+                log(AGENT, f"Idealista {tipo} pagina {page}: errore {e}")
+                break
+            if "captcha" in h[:5000].lower() and "<article" not in h:
+                log(AGENT, "Idealista: richiesta verifica anti-bot, interrompo")
+                geocode_all(out)
+                return out
+            batch = _idealista_parse(h, str(n))
+            new = [b for b in batch if b["id"] not in {o["id"] for o in out}]
+            log(AGENT, f"Idealista {tipo}: pagina {page} → {len(new)}")
+            if not new:
+                break  # oltre l'ultima pagina Idealista ripete l'ultima
+            out.extend(new)
+            if f"pagina-{page + 1}.htm" not in h:
+                break
+            page += 1
     geocode_all(out)
     return out
 
@@ -311,6 +327,19 @@ def _tecnocasa_detail(url, base):
     return base
 
 
+def _tecnocasa_locali(x, r):
+    """N. locali ("1", "2"...) se la card è una tipologia cercata, altrimenti None."""
+    titolo = (x.get("title") or "").lower()
+    for n, tipo in tipologie(r):
+        if tipo[:-1] + "e" in titolo:  # "monolocale", "bilocale"
+            return str(n)
+        if ("appartament" in (x.get("detail_url") or "")
+                and str(x.get("rooms", "")).startswith(f"{n} local")
+                and not re.search(r"box|posto auto|garage|magazzin|negozio|ufficio", titolo)):
+            return str(n)
+    return None
+
+
 def tecnocasa(cfg, unis_filter):
     """unis_filter(lat, lon) -> bool: i dettagli si scaricano solo per gli
     annunci vicini alle università (geocodificati dalla card)."""
@@ -329,14 +358,10 @@ def tecnocasa(cfg, unis_filter):
                 break
             page += 1
             continue
-        mono = [x for x in est if "monolocale" in (x.get("title") or "").lower()
-                or ("appartament" in (x.get("detail_url") or "")
-                    and str(x.get("rooms", "")).startswith("1 local")
-                    and not re.search(r"box|posto auto|garage|magazzin|negozio|ufficio",
-                                      (x.get("title") or "").lower()))]
+        mono = [x for x in est if _tecnocasa_locali(x, r)]
         cards.extend(mono)
         if page % 10 == 0 or page == pages:
-            log(AGENT, f"Tecnocasa: pagina {page}/{pages}, monolocali finora {len(cards)}")
+            log(AGENT, f"Tecnocasa: pagina {page}/{pages}, annunci finora {len(cards)}")
         page += 1
 
     out = []
@@ -350,7 +375,7 @@ def tecnocasa(cfg, unis_filter):
             indirizzo=(x.get("subtitle") or "").replace(" - ", ", "),
             prezzo=prezzo, prezzo_precedente=_num_it(re.sub(r"[^\d.]", "",
                                                             x.get("previous_price") or "")),
-            mq=_num(re.sub(r"[^\d]", "", x.get("surface") or "")), locali="1",
+            mq=_num(re.sub(r"[^\d]", "", x.get("surface") or "")), locali=_tecnocasa_locali(x, r),
             immagini=[i["url"]["gallery"] for i in (x.get("images") or [])[:8]
                       if (i.get("url") or {}).get("gallery")],
         )
@@ -360,7 +385,7 @@ def tecnocasa(cfg, unis_filter):
             log(AGENT, f"Tecnocasa dettaglio {x['id']}: {e}")
         out.append(rec)
     geocode_all(out)
-    log(AGENT, f"Tecnocasa: {len(out)} monolocali nel range di prezzo")
+    log(AGENT, f"Tecnocasa: {len(out)} annunci nel range di prezzo")
     return out
 
 
@@ -423,7 +448,7 @@ def immobiliare_email(cfg):
     M = imaplib.IMAP4_SSL(e.get("imap_host", "imap.gmail.com"))
     M.login(e["utente"], e["password_app"].replace(" ", ""))
     M.select("INBOX", readonly=True)
-    _, d = M.search(None, "FROM", "notifiche.immobiliare.it", "SINCE", dal)
+    _, d = M.search(None, "FROM", "immobiliare.it", "SINCE", dal)
     trovati = {}
     for num in d[0].split():
         _, m = M.fetch(num, "(BODY.PEEK[])")

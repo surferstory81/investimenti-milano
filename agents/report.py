@@ -25,7 +25,7 @@ def componi(c, cfg):
     data = datetime.fromisoformat(c["aggiornato"]).strftime("%d/%m/%Y %H:%M")
     fonti = ", ".join(f"{k} {v}" if v else f"{k} n.d." for k, v in c.get("per_fonte", {}).items())
     nuovi = sum(1 for a in top if a.get("nuovo_in_top"))
-    oggetto = (f"Monolocali universitari Milano — classifica del {data[:10]}"
+    oggetto = (f"Mono e bilocali universitari Milano — classifica del {data[:10]}"
                + (f" ({nuovi} nuovi)" if nuovi else ""))
 
     righe_txt, righe_html = [], []
@@ -57,14 +57,14 @@ def componi(c, cfg):
  <div style="font-size:20px;font-weight:700">{v['punteggio']:.0f}</div>
  <div style="font-size:11px;color:#5c5b56">{e(v['giudizio'])}</div></td></tr>""")
 
-    testo = (f"Classifica aggiornata il {data}: {c['totale_valutati']} monolocali valutati "
+    testo = (f"Classifica aggiornata il {data}: {c['totale_valutati']} immobili valutati "
              f"vicino alle università di Milano.\nFonti: {fonti}\n\n"
              + "\n".join(righe_txt) +
              f"\nDettagli e richiesta appuntamenti: http://localhost:{porta}\n"
              "Rendimenti e costi sono stime indicative.\n")
     corpo_html = f"""<div style="font-family:system-ui,Segoe UI,Roboto,sans-serif;color:#1d1d1b;max-width:760px">
-<h2 style="margin:0 0 4px">Monolocali universitari · Milano</h2>
-<p style="color:#5c5b56;margin:0 0 14px;font-size:13px">Classifica aggiornata il {data} · {c['totale_valutati']} monolocali valutati
+<h2 style="margin:0 0 4px">Mono e bilocali universitari · Milano</h2>
+<p style="color:#5c5b56;margin:0 0 14px;font-size:13px">Classifica aggiornata il {data} · {c['totale_valutati']} immobili valutati
 vicino agli atenei · Fonti: {html.escape(fonti)}</p>
 <table style="border-collapse:collapse;width:100%">{''.join(righe_html)}</table>
 <p style="color:#5c5b56;font-size:12px;margin-top:16px">Punteggio 0–100 da investitore (valore, rendimento netto, posizione, stato,
