@@ -3,6 +3,7 @@ di annunci normalizzati con lo stesso schema."""
 import hashlib
 import html as htmlmod
 import json
+import random
 import re
 import time
 import urllib.parse
@@ -70,6 +71,7 @@ def _subito_item(item):
         ascensore=f("/elevator") == "Sì", aria_condizionata=f("/air_conditioning") == "Sì",
         lat=_num(mp.get("latitude")), lon=_num(mp.get("longitude")),
         pin_preciso=bool(mp.get("showPin")),
+        comune=((item.get("geo") or {}).get("town") or {}).get("value"),
         inserzionista=adv.get("name"), agenzia=bool(adv.get("company")),
         immagini=[i["cdnBaseUrl"] + "?rule=gallery-desktop-1x-auto"
                   for i in item.get("images", [])[:8] if i.get("cdnBaseUrl")],
@@ -107,6 +109,16 @@ def tipologie(r):
     """[(n. locali, "monolocali"), ...] richiesti da ricerca.locali_min/max."""
     return [(n, TIPOLOGIE[n]) for n in range(r["locali_min"], r["locali_max"] + 1)
             if n in TIPOLOGIE]
+
+
+def _pagine_browser(r):
+    """Casa.it e Idealista bloccano chi fa molte richieste ravvicinate: poche
+    pagine (le più recenti) e pause lunghe, una volta al giorno."""
+    return min(r["max_pagine"], r.get("browser_max_pagine", 3))
+
+
+def _pausa_browser():
+    time.sleep(random.uniform(8, 15))
 
 
 # ----------------------------------------------------------------- Casa.it
@@ -154,8 +166,9 @@ def casa(ff, cfg):
     out = []
     for n, tipo in tipologie(r):
         page, pages = 1, 1
-        while page <= min(pages, r["max_pagine"]):
+        while page <= min(pages, _pagine_browser(r)):
             url = CASA.format(tipo=tipo) + (f"?page={page}" if page > 1 else "")
+            _pausa_browser()
             try:
                 h = ff.get(url, wait=4)
                 m = re.search(r'window\.__INITIAL_STATE__ = JSON\.parse\((".*?")\);', h, re.S)
@@ -222,8 +235,9 @@ def idealista(ff, cfg):
     for n, tipo in tipologie(r):
         base = IDEALISTA.format(pmax=r["prezzo_max"], pmin=r["prezzo_min"], tipo=tipo)
         page = 1
-        while page <= r["max_pagine"]:
-            url = base + (f"pagina-{page}.htm" if page > 1 else "")
+        while page <= _pagine_browser(r):
+            url = base + (f"pagina-{page}.htm" if page > 1 else "") + "?ordine=pubblicazione-desc"
+            _pausa_browser()
             try:
                 h = ff.get(url, wait=4)
             except Exception as e:
@@ -303,7 +317,7 @@ def _tecnocasa_detail(url, base):
              if p.get("subclass") == "subway"]
     base.update(
         descrizione=_text(e.get("description") or ""),
-        indirizzo=(data.get("Indirizzo") or e.get("address") or "") + ", Milano",
+        indirizzo=(data.get("Indirizzo") or e.get("address") or "") + ", " + (data.get("Comune") or "Milano"),
         lat=_num(e.get("latitude")), lon=_num(e.get("longitude")),
         pin_preciso=bool(e.get("publish_map")),
         data_annuncio=e.get("last_published_at"),
@@ -323,6 +337,8 @@ def _tecnocasa_detail(url, base):
         libero=ft.get("free"),
         anno_costruzione=ft.get("build_year"),
         metro_vicina=f"{metro[0]['name']} ({metro[0]['distance']})" if metro else None,
+        camere=ft.get("bedrooms"), terrazzi=ft.get("terraces"), box=ft.get("box"),
+        anno_ristrutturazione=ft.get("inside_renovation_year") or ft.get("renovation_year"),
     )
     return base
 
@@ -436,14 +452,16 @@ def _imm_parse(testo):
     return out
 
 
-def immobiliare_email(cfg):
+def _imm_email(cfg, giorni):
+    """Annunci dagli avvisi di Immobiliare.it degli ultimi `giorni`, ciascuno con
+    il nome della ricerca salvata che l'ha generato (campo "ricerca")."""
     import email
     import imaplib
     from datetime import datetime, timedelta
-    e, r = cfg["email"], cfg["ricerca"]
+    from email.header import decode_header, make_header
+    e = cfg["email"]
     if not e.get("password_app"):
         raise RuntimeError("serve email.password_app in config.json")
-    giorni = r.get("immobiliare_email_giorni", 30)
     dal = (datetime.now() - timedelta(days=giorni)).strftime("%d-%b-%Y")
     M = imaplib.IMAP4_SSL(e.get("imap_host", "imap.gmail.com"))
     M.login(e["utente"], e["password_app"].replace(" ", ""))
@@ -453,15 +471,28 @@ def immobiliare_email(cfg):
     for num in d[0].split():
         _, m = M.fetch(num, "(BODY.PEEK[])")
         msg = email.message_from_bytes(m[0][1])
+        oggetto = str(make_header(decode_header(msg["Subject"] or "")))
         for p in msg.walk():
             if p.get_content_type() == "text/plain":
                 testo = p.get_payload(decode=True).decode(p.get_content_charset() or "utf-8", "replace")
+                nome = re.search(r"per la tua ricerca\s+([^\n]+)", testo)
+                ricerca = (nome.group(1) if nome else oggetto.split(":")[-1]).strip()
                 for x in _imm_parse(testo):
+                    x["ricerca"] = ricerca
                     trovati[x["click"]] = x
     M.logout()
+    return list(trovati.values())
 
+
+def immobiliare_email(cfg, r=None, profilo="studenti"):
+    """Profilo "famiglia": solo le ricerche salvate con "famiglia" nel nome;
+    profilo "studenti": tutte le altre."""
+    r = r or cfg["ricerca"]
+    giorni = r.get("immobiliare_email_giorni", 30)
     out, visti = [], set()
-    for x in trovati.values():
+    for x in _imm_email(cfg, giorni):
+        if ("famiglia" in x["ricerca"].lower()) != (profilo == "famiglia"):
+            continue
         if not x["prezzo"] or not (r["prezzo_min"] <= x["prezzo"] <= r["prezzo_max"]):
             continue
         if x["locali"] and not (r["locali_min"] <= int(x["locali"]) <= r["locali_max"]):
@@ -471,9 +502,10 @@ def immobiliare_email(cfg):
             continue
         visti.add(ann_id or url)
         out.append(base_record(
-            id="immobiliare-" + (ann_id or hashlib.sha1(url.encode()).hexdigest()[:12]), fonte="Immobiliare.it", url=url,
+            id="immobiliare-" + (ann_id or hashlib.sha1(url.encode()).hexdigest()[:12]),
+            fonte="Immobiliare.it", url=url,
             titolo=x["titolo"], indirizzo=x["indirizzo"], prezzo=x["prezzo"],
             mq=x["mq"], locali=x["locali"], bagni=x["bagni"]))
     geocode_all(out)
-    log(AGENT, f"Immobiliare.it (avvisi email ultimi {giorni} giorni): {len(out)} annunci nel range")
+    log(AGENT, f"Immobiliare.it {profilo} (avvisi email ultimi {giorni} giorni): {len(out)} annunci nel range")
     return out

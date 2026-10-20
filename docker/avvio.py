@@ -19,5 +19,7 @@ while True:
     time.sleep((prossima - ora).total_seconds())
     log("Orchestratore", "ricerca giornaliera programmata")
     subprocess.run([sys.executable, "run.py", "--report"])
+    if load_config().get("famiglia"):
+        subprocess.run([sys.executable, "-m", "agents.famiglia", "--report"])
     if server.poll() is not None:
         server = subprocess.Popen([sys.executable, "server.py"])

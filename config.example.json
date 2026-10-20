@@ -12,9 +12,13 @@
       "tecnocasa",
       "casa",
       "idealista",
-      "immobiliare_email"
+      "immobiliare_email",
+      "gabetti",
+      "dove",
+      "casavo"
     ],
-    "immobiliare_email_giorni": 30
+    "immobiliare_email_giorni": 30,
+    "browser_max_pagine": 3
   },
   "universita": [
     {
@@ -124,5 +128,61 @@
       "tuo.indirizzo@gmail.com"
     ],
     "orario": "08:00"
+  },
+  "famiglia": {
+    "prezzo_min": 300000,
+    "prezzo_max": 1300000,
+    "locali_min": 4,
+    "camere_min": 3,
+    "bagni_min": 2,
+    "mq_min": 95,
+    "mq_ideale": 140,
+    "raggio_km": 12,
+    "max_pagine": 60,
+    "top": 30,
+    "top_report": 15,
+    "immobiliare_email_giorni": 30,
+    "subito_province": [
+      "milano"
+    ],
+    "tecnocasa_comuni": [
+      "milano/milano",
+      "milano/sesto-san-giovanni",
+      "milano/cinisello-balsamo",
+      "milano/cologno-monzese",
+      "milano/vimodrone",
+      "milano/segrate",
+      "milano/peschiera-borromeo",
+      "milano/san-donato-milanese",
+      "milano/opera",
+      "milano/rozzano",
+      "milano/assago",
+      "milano/buccinasco",
+      "milano/corsico",
+      "milano/cesano-boscone",
+      "milano/trezzano-sul-naviglio",
+      "milano/settimo-milanese",
+      "milano/pero",
+      "milano/novate-milanese",
+      "milano/bollate",
+      "milano/baranzate",
+      "milano/cormano",
+      "milano/bresso",
+      "monza-brianza/monza"
+    ],
+    "pesi": {
+      "camere": 16,
+      "bagni": 12,
+      "salone": 10,
+      "cucina_abitabile": 10,
+      "terrazzo": 6,
+      "balcone": 3,
+      "box": 6,
+      "aria_condizionata": 4,
+      "domotica": 3,
+      "ristrutturato": 8,
+      "prezzo": 15,
+      "metratura": 7
+    }
   }
 }

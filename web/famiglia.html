@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Casa famiglia · Milano</title>
+<style>
+:root{
+  --bg:#f6f5f1; --surface:#fff; --surface-2:#f0eee8; --ink:#1d1d1b; --ink-2:#5c5b56; --ink-3:#8b8a84;
+  --line:#e3e0d8; --accent:#1f5f4a; --accent-ink:#fff; --accent-soft:#e3efe9;
+  --good:#1f7a4d; --warn:#a86a00; --bad:#b23b2e; --good-soft:#e5f3eb; --warn-soft:#fbf0dc; --bad-soft:#f9e6e3;
+  --radius:12px; --shadow:0 1px 2px rgba(0,0,0,.04),0 4px 16px rgba(0,0,0,.04);
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){:root{
+  --bg:#141413; --surface:#1d1d1b; --surface-2:#262624; --ink:#ecebe6; --ink-2:#aeada6; --ink-3:#7d7c76;
+  --line:#33322f; --accent:#5fb393; --accent-ink:#0e1a15; --accent-soft:#1f3229;
+  --good:#6cc596; --warn:#e2a945; --bad:#ef7e70; --good-soft:#1c3026; --warn-soft:#33281a; --bad-soft:#3a201d;
+  --shadow:none; color-scheme:dark;
+}}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;}
+.wrap{max-width:1180px;margin:0 auto;padding:28px 16px 80px}
+a{color:var(--accent)}
+h1{font-size:26px;letter-spacing:-.02em;margin:0}
+h2{font-size:17px;margin:34px 0 12px}
+.muted{color:var(--ink-2)} .small{font-size:12.5px}
+.num{font-variant-numeric:tabular-nums}
+header{display:flex;flex-wrap:wrap;gap:16px;justify-content:space-between;align-items:flex-end;margin-bottom:22px}
+.btn{appearance:none;border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:9px;
+  padding:9px 14px;font:inherit;font-weight:600;cursor:pointer}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.btn:disabled{opacity:.55;cursor:default}
+.status{font-size:12.5px;color:var(--ink-2);margin-top:6px;text-align:right}
+.log{font:11.5px/1.45 ui-monospace,Menlo,monospace;background:var(--surface-2);border-radius:8px;padding:10px 12px;
+  max-height:180px;overflow:auto;white-space:pre-wrap;margin:0 0 18px;color:var(--ink-2)}
+.sources{display:flex;flex-wrap:wrap;gap:6px;margin:12px 0 0}
+.chip{display:inline-flex;align-items:center;gap:5px;font-size:12px;padding:3px 9px;border-radius:99px;
+  background:var(--surface-2);color:var(--ink-2);white-space:nowrap}
+.chip.good{background:var(--good-soft);color:var(--good)} .chip.warn{background:var(--warn-soft);color:var(--warn)}
+.chip.bad{background:var(--bad-soft);color:var(--bad)}
+.filters{display:flex;flex-wrap:wrap;gap:8px 16px;align-items:center;background:var(--surface);border:1px solid var(--line);
+  border-radius:var(--radius);padding:12px 14px;margin-bottom:14px;font-size:13px}
+.filters label{display:inline-flex;gap:6px;align-items:center}
+.filters select,.filters input[type=number]{font:inherit;padding:4px 6px;border-radius:7px;border:1px solid var(--line);
+  background:var(--surface);color:var(--ink);max-width:130px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);
+  margin-bottom:12px;display:grid;grid-template-columns:40px 170px 1fr 90px;gap:16px;padding:14px 16px;align-items:start}
+.rank{font-size:20px;font-weight:700;color:var(--ink-3);text-align:center;padding-top:2px}
+.thumb{width:170px;aspect-ratio:4/3;border-radius:8px;object-fit:cover;background:var(--surface-2);display:block}
+.title{font-weight:650;font-size:15px;margin:0 0 2px;line-height:1.3}
+.facts{display:flex;flex-wrap:wrap;gap:4px 14px;margin:6px 0 8px;color:var(--ink-2);font-size:13px}
+.facts b{color:var(--ink);font-weight:650}
+.tags{display:flex;flex-wrap:wrap;gap:5px}
+.score{text-align:right}
+.score b{font-size:26px;letter-spacing:-.02em;display:block}
+.links{font-size:12.5px;margin-top:8px;display:flex;flex-wrap:wrap;gap:4px 12px}
+.empty{padding:60px 20px;text-align:center;color:var(--ink-2)}
+@media (max-width:760px){
+  .card{grid-template-columns:30px 1fr 56px}
+  .card .thumb{display:none}
+  .card>a:nth-child(2){display:none}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>Casa per la famiglia · Milano e cintura</h1>
+      <div class="muted" id="sub">Caricamento…</div>
+      <div class="sources" id="sources"></div>
+      <div class="small" style="margin-top:8px"><a href="index.html">← Mono e bilocali universitari</a></div>
+    </div>
+    <div>
+      <button class="btn primary" id="btnRun">Nuova ricerca</button>
+      <div class="status" id="status"></div>
+    </div>
+  </header>
+  <pre class="log" id="log" hidden></pre>
+  <p class="muted small" style="margin-top:0">Requisiti: 3+ camere, 2 bagni, salone, cucina abitabile (in giallo se mancano o non risultano dall'annuncio).
+    Plus in verde: terrazzo, balcone, box, aria condizionata, domotica, ristrutturato. Il punteggio 0–100 considera anche
+    il prezzo al mq rispetto al comune e la metratura.</p>
+  <div class="filters">
+    <label>Comune <select id="fComune"><option value="">Tutti</option></select></label>
+    <label>Prezzo max <input type="number" id="fPrezzo" step="50000" placeholder="€"></label>
+    <label><input type="checkbox" id="fReq"> Solo con tutti i requisiti</label>
+    <label><input type="checkbox" id="fNuovi"> Solo nuovi oggi</label>
+    <span class="muted" id="fCount"></span>
+  </div>
+  <div id="list"></div>
+</div>
+<script>
+const $ = s => document.querySelector(s);
+const eur = n => n == null ? "—" : new Intl.NumberFormat("it-IT",{style:"currency",currency:"EUR",maximumFractionDigits:0}).format(n);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const dt = s => s ? new Date(s).toLocaleString("it-IT",{dateStyle:"medium",timeStyle:"short"}) : "—";
+let D = null, wasRunning = false;
+
+function pref(k, v){ try{ if(v===undefined) return localStorage.getItem("fam_"+k); localStorage.setItem("fam_"+k, v); }catch(e){} }
+
+async function load(){
+  D = await (await fetch("/api/famiglia")).json();
+  if(!D){ $("#list").innerHTML = `<div class="empty">Nessun dato ancora. Premi <b>Nuova ricerca</b>.</div>`; $("#sub").textContent=""; return; }
+  $("#sub").textContent = `Aggiornato ${dt(D.aggiornato)} · ${D.totale_valutati} appartamenti valutati`;
+  $("#sources").innerHTML = Object.entries(D.per_fonte||{}).map(([k,v]) =>
+    `<span class="chip ${v? "":"warn"}">${esc(k)}: ${v ? v + " annunci" : "nessuno"}</span>`).join("");
+  const comuni = [...new Set([...D.top, ...D.altri].map(a => a.comune))].sort();
+  $("#fComune").innerHTML = `<option value="">Tutti</option>` + comuni.map(c => `<option>${esc(c)}</option>`).join("");
+  $("#fComune").value = pref("comune") || "";
+  render();
+}
+
+function render(){
+  const oggi = D.aggiornato.slice(0,10);
+  const com = $("#fComune").value, pmax = +$("#fPrezzo").value || Infinity;
+  const all = [...D.top, ...D.altri].filter(a =>
+    (!com || a.comune === com) && a.prezzo <= pmax &&
+    (!$("#fReq").checked || !a.mancano.length) &&
+    (!$("#fNuovi").checked || (a.prima_vista||"").slice(0,10) === oggi));
+  $("#fCount").textContent = `${all.length} risultati`;
+  $("#list").innerHTML = all.length ? all.map((a,i) => card(a, i+1, oggi)).join("") : `<div class="empty">Nessun risultato con questi filtri.</div>`;
+}
+
+function card(a, i, oggi){
+  const c = a.caratteristiche;
+  const storico = a.prezzi_storico || [];
+  const calo = storico.length > 1 && storico[0].prezzo > a.prezzo ? Math.round(100*(1 - a.prezzo/storico[0].prezzo)) : 0;
+  const tags = [
+    ...((a.prima_vista||"").slice(0,10) === oggi ? [`<span class="chip good">Nuovo</span>`] : []),
+    ...a.plus.map(p => `<span class="chip good">${esc(p)}</span>`),
+    ...a.mancano.map(m => `<span class="chip warn">manca: ${esc(m)}</span>`),
+    ...(calo ? [`<span class="chip good">Prezzo −${calo}%</span>`] : []),
+    ...a.segnali.filter(s => s.tipo !== "positivo" || /ribassato/.test(s.etichetta)).map(s =>
+      `<span class="chip ${s.tipo === "attenzione" ? "warn" : s.tipo === "esclusione" ? "bad" : "good"}">${esc(s.etichetta)}</span>`),
+  ].join("");
+  const altre = (a.altre_fonti||[]).map(o => `<a href="${esc(o.url)}" target="_blank" rel="noopener">${esc(o.fonte)}</a>`).join("");
+  return `<div class="card">
+    <div class="rank">${i}</div>
+    <a href="${esc(a.url)}" target="_blank" rel="noopener">${a.immagini?.[0] ? `<img class="thumb" loading="lazy" src="${esc(a.immagini[0])}" alt="">` : `<div class="thumb"></div>`}</a>
+    <div>
+      <div class="title">${esc(a.titolo)}</div>
+      <div class="muted small">${esc(a.indirizzo || a.comune)} · ${a.km_centro} km dal Duomo</div>
+      <div class="facts num">
+        <span><b>${eur(a.prezzo)}</b></span><span><b>${Math.round(a.mq)}</b> mq</span>
+        <span>${eur(a.prezzo_mq)}/mq${a.sconto_zona_pct != null ? ` (${a.sconto_zona_pct > 0 ? "−" : "+"}${Math.abs(a.sconto_zona_pct)}% vs comune)` : ""}</span>
+        <span><b>${c.camere ?? "?"}</b> camere${c.camere_stimate ? " (stima)" : ""}</span><span><b>${c.bagni ?? "?"}</b> bagni</span>
+        ${a.piano ? `<span>Piano ${esc(a.piano)}</span>` : ""}${a.classe_energetica ? `<span>Classe ${esc(a.classe_energetica)}</span>` : ""}
+      </div>
+      <div class="tags">${tags}</div>
+      <div class="links"><a href="${esc(a.url)}" target="_blank" rel="noopener">Apri su ${esc(a.fonte)}</a>${altre ? `<span class="muted">anche su</span>${altre}` : ""}
+        ${a.inserzionista ? `<span class="muted">${esc(a.inserzionista)}</span>` : ""}</div>
+    </div>
+    <div class="score"><b class="num">${Math.round(a.punteggio)}</b><span class="muted small">/100</span></div>
+  </div>`;
+}
+
+["#fComune","#fPrezzo","#fReq","#fNuovi"].forEach(s => $(s).addEventListener("input", () => { pref("comune", $("#fComune").value); render(); }));
+
+$("#btnRun").onclick = async () => {
+  await fetch("/api/famiglia/ricerca",{method:"POST",headers:{"Content-Type":"application/json"},body:"{}"});
+  poll();
+};
+async function poll(){
+  const s = await (await fetch("/api/stato")).json();
+  $("#btnRun").disabled = s.in_corso;
+  $("#log").hidden = !s.in_corso;
+  $("#log").textContent = s.log.join("\n"); $("#log").scrollTop = 1e9;
+  $("#status").textContent = s.in_corso ? "Ricerca in corso…" : s.errore ? "Errore: " + s.errore : "";
+  if (wasRunning && !s.in_corso) load();
+  wasRunning = s.in_corso;
+  if (s.in_corso) setTimeout(poll, 2000);
+}
+load(); poll();
+</script>
+</body>
+</html>

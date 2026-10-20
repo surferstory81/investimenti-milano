@@ -7,7 +7,7 @@ saltata). Immobiliare.it blocca le visite automatiche con CAPTCHA: i suoi annunc
 arrivano dagli avvisi email delle ricerche salvate, letti via IMAP."""
 from datetime import datetime
 
-from . import fonti
+from . import fonti, fonti_extra
 from .browser import Firefox
 from .common import load_config, load_json, log, nearest_universities, save_json
 
@@ -34,6 +34,12 @@ def run():
         add("Subito.it", lambda: fonti.subito("vendita", cfg))
     if "tecnocasa" in attive:
         add("Tecnocasa", lambda: fonti.tecnocasa(cfg, None))
+    if "gabetti" in attive:
+        add("Gabetti", lambda: fonti_extra.gabetti(cfg["ricerca"], ["milano"]))
+    if "dove" in attive:
+        add("Dove.it", lambda: fonti_extra.dove(cfg["ricerca"], ["milano"]))
+    if "casavo" in attive:
+        add("Casavo", lambda: fonti_extra.casavo(cfg["ricerca"]))
     if "immobiliare_email" in attive:
         add("Immobiliare.it", lambda: fonti.immobiliare_email(cfg))
     if "casa" in attive or "idealista" in attive:

@@ -5,17 +5,17 @@ import threading
 import traceback
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 
-from agents import mailer
+from agents import famiglia, mailer
 from agents.common import DATA, ROOT, load_config, load_json, log, save_json
 from run import pipeline
 
 STATO = {"in_corso": False, "errore": None}
 
 
-def _pipeline_bg(solo_valuta):
+def _pipeline_bg(solo_valuta, fn=None):
     STATO.update(in_corso=True, errore=None)
     try:
-        pipeline(solo_valuta)
+        fn() if fn else pipeline(solo_valuta)
     except Exception as e:
         STATO["errore"] = str(e)
         log("Orchestratore", "ERRORE: " + traceback.format_exc())
@@ -52,6 +52,8 @@ class Handler(SimpleHTTPRequestHandler):
                 "email": load_json("email_inviate.json", {}),
                 "smtp_attivo": bool(cfg["email"].get("abilitato") and cfg["email"].get("password_app")),
             })
+        if self.path == "/api/famiglia":
+            return self._json(load_json("famiglia.json"))
         if self.path == "/api/stato":
             log_path = DATA / "agenti.log"
             righe = log_path.read_text().splitlines()[-14:] if log_path.exists() else []
@@ -59,9 +61,9 @@ class Handler(SimpleHTTPRequestHandler):
         return super().do_GET()
 
     def do_POST(self):
-        # accetta solo richieste dalla pagina locale
+        # accetta solo richieste dalla pagina servita da questo stesso server
         origin = self.headers.get("Origin", "")
-        if origin and not origin.startswith(("http://localhost", "http://127.0.0.1")):
+        if origin and origin != f"http://{self.headers.get('Host', '')}":
             return self._json({"errore": "origine non consentita"}, 403)
         try:
             b = self._body()
@@ -70,6 +72,11 @@ class Handler(SimpleHTTPRequestHandler):
                     return self._json({"ok": False, "messaggio": "ricerca già in corso"})
                 threading.Thread(target=_pipeline_bg, args=(bool(b.get("solo_valuta")),),
                                  daemon=True).start()
+                return self._json({"ok": True})
+            if self.path == "/api/famiglia/ricerca":
+                if STATO["in_corso"]:
+                    return self._json({"ok": False, "messaggio": "ricerca già in corso"})
+                threading.Thread(target=_pipeline_bg, args=(False, famiglia.run), daemon=True).start()
                 return self._json({"ok": True})
             if self.path == "/api/selezione":
                 save_json("selezione.json", list(dict.fromkeys(b.get("ids", []))))

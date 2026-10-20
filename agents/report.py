@@ -60,7 +60,7 @@ def componi(c, cfg):
     testo = (f"Classifica aggiornata il {data}: {c['totale_valutati']} immobili valutati "
              f"vicino alle università di Milano.\nFonti: {fonti}\n\n"
              + "\n".join(righe_txt) +
-             f"\nDettagli e richiesta appuntamenti: http://localhost:{porta}\n"
+             f"\nDettagli e richiesta appuntamenti: {cfg['server'].get('url_pubblico', f'http://localhost:{porta}')}\n"
              "Rendimenti e costi sono stime indicative.\n")
     corpo_html = f"""<div style="font-family:system-ui,Segoe UI,Roboto,sans-serif;color:#1d1d1b;max-width:760px">
 <h2 style="margin:0 0 4px">Mono e bilocali universitari · Milano</h2>
@@ -68,8 +68,8 @@ def componi(c, cfg):
 vicino agli atenei · Fonti: {html.escape(fonti)}</p>
 <table style="border-collapse:collapse;width:100%">{''.join(righe_html)}</table>
 <p style="color:#5c5b56;font-size:12px;margin-top:16px">Punteggio 0–100 da investitore (valore, rendimento netto, posizione, stato,
-costi accessori, dimensione). Rendimenti e costi sono stime indicative. Dettagli e richiesta appuntamenti dalla dashboard
-locale: http://localhost:{porta}</p></div>"""
+costi accessori, dimensione). Rendimenti e costi sono stime indicative. Dettagli e richiesta appuntamenti dalla dashboard:
+<a href="{cfg['server'].get('url_pubblico', f'http://localhost:{porta}')}">{cfg['server'].get('url_pubblico', f'http://localhost:{porta}')}</a></p></div>"""
     return oggetto, testo, corpo_html
 
 
