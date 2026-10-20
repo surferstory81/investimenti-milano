@@ -42,6 +42,20 @@ PLUS = [
     ("domotica", "Domotica", r"domotic|smart home|\bknx\b"),
     ("ristrutturato", "Ristrutturato", r"ristrutturat|rinnovat|nuova costruzione"),
 ]
+# plus per i bambini (spazi del complesso/condominio)
+BIMBI = [
+    ("piscina", "Piscina", r"piscin"),
+    ("area_giochi", "Area giochi / campi",
+     r"(?:parco|area|zona|spazio) (?:giochi|bimbi|bambini)|playground|giochi per bambini|ludoteca|"
+     r"camp[oi] (?:da |di )?(?:calcio|calcetto|tennis|basket|pallavolo|padel|gioco)"),
+    ("spazi_comuni", "Spazi comuni attrezzati",
+     r"giardino condominiale|parco condominiale|(?:area|spazio) verde (?:condominiale|comune)|"
+     r"palestra (?:condominiale|comune|interna)|sala (?:comune|polifunzionale|feste|condominiale|hobby)|"
+     r"spazi comuni|kids room|area fitness|club house|clubhouse|co-?working condominiale"),
+]
+# fasce di posizione: (etichetta, km max dal Duomo, punteggio 0..1); fuori Milano = cintura
+ZONE = [("Centro", 2.5, 1.0), ("Semicentro", 5.0, 0.75), ("Periferia Milano", 99, 0.4)]
+CINTURA = ("Cintura", 0.15)
 
 
 def _n(x):
@@ -133,22 +147,34 @@ def caratteristiche(a):
     if bagni is None and re.search(r"doppi servizi|doppio bagno", testo):
         bagni = 2
     car["bagni"] = bagni
-    for k, _, rx in REQUISITI + PLUS:
+    for k, _, rx in REQUISITI + PLUS + BIMBI:
         car[k] = bool(re.search(rx, testo))
     car["terrazzo"] |= bool(a.get("terrazzi"))
     car["balcone"] |= bool(a.get("balcone"))
     car["box"] |= bool(a.get("box"))
     car["aria_condizionata"] |= bool(a.get("aria_condizionata"))
+    car["piscina"] |= bool(a.get("piscina"))
+    car["spazi_comuni"] |= "condominial" in (a.get("giardino") or "").lower()
     st = stato_norm(a.get("stato"), testo)
     car["ristrutturato"] |= st in ("ottimo", "nuovo") or bool(a.get("anno_ristrutturazione"))
     car["stato"] = st
     return car
 
 
+def zona(a):
+    if (a.get("comune") or "Milano").lower() != "milano":
+        return CINTURA
+    for nome, km, punti in ZONE:
+        if a["km_centro"] <= km:
+            return nome, punti
+
+
 def valuta(a, med_comune, f):
     c = a["caratteristiche"]
     p = f["pesi"]
     s = {}
+    a["zona"], punti = zona(a)
+    s["posizione"] = p["posizione"] * punti
     # requisiti
     cam = c["camere"] or 0
     s["camere"] = p["camere"] * (1 if cam >= f["camere_min"] else 0.3 if cam == f["camere_min"] - 1 else 0)
@@ -158,7 +184,7 @@ def valuta(a, med_comune, f):
     s["salone"] = p["salone"] * c["salone"]
     s["cucina_abitabile"] = p["cucina_abitabile"] * c["cucina_abitabile"]
     # plus
-    for k, _, _ in PLUS:
+    for k, _, _ in PLUS + BIMBI:
         s[k] = p[k] * c[k]
     # prezzo al mq rispetto alla mediana del comune (±20% → 0..1)
     med = med_comune.get(a["comune"]) or med_comune.get("_tutti")
@@ -178,6 +204,7 @@ def valuta(a, med_comune, f):
                                       ("salone", "Salone"), ("cucina_abitabile", "Cucina abitabile"))
                     if s[k] < p[k]]
     a["plus"] = [et for k, et, _ in PLUS if c[k]]
+    a["plus_bimbi"] = [et for k, et, _ in BIMBI if c[k]]
 
 
 def _comune(a):
@@ -189,10 +216,13 @@ def _comune(a):
     return "Milano"
 
 
-def run(report=False):
+def run(report=False, solo_valuta=False):
     cfg = load_config()
     f = cfg["famiglia"]
     raccolti, per_fonte = [], {}
+    if solo_valuta:
+        g = load_json("famiglia_grezzi.json") or {"annunci": [], "per_fonte": {}}
+        raccolti, per_fonte = g["annunci"], g["per_fonte"]
 
     def add(nome, fn):
         try:
@@ -203,14 +233,9 @@ def run(report=False):
         per_fonte[nome] = len(res)
         raccolti.extend(res)
 
-    log(AGENT, "=== avvio ricerca famiglia ===")
-    add("Subito.it", lambda: subito(f))
-    add("Tecnocasa", lambda: tecnocasa(f))
-    comuni = [c.split("/")[-1] for c in f["tecnocasa_comuni"]]
-    add("Gabetti", lambda: fonti_extra.gabetti(dict(f, locali_max=99), comuni))
-    add("Dove.it", lambda: fonti_extra.dove(dict(f, locali_max=99), comuni))
-    add("Casavo", lambda: fonti_extra.casavo(dict(f, locali_max=99)))
-    add("Immobiliare.it", lambda: fonti.immobiliare_email(cfg, dict(f, locali_max=99), "famiglia"))
+    if not solo_valuta:
+        _raccogli(cfg, f, add)
+        save_json("famiglia_grezzi.json", {"per_fonte": per_fonte, "annunci": raccolti})
 
     tenuti, scartati = [], 0
     for a in raccolti:
@@ -261,12 +286,23 @@ def run(report=False):
     n = f.get("top", 30)
     save_json("famiglia.json", {"aggiornato": now, "per_fonte": per_fonte,
                                 "totale_valutati": len(tenuti), "scartati": scartati,
-                                "top": tenuti[:n], "altri": tenuti[n:n + 120]})
+                                "top": tenuti[:n], "altri": tenuti[n:n + 300]})
     log(AGENT, f"raccolti {len(raccolti)} ({per_fonte}); valutati {len(tenuti)}, scartati {scartati}; "
                f"migliore: {tenuti[0]['titolo'][:60] if tenuti else '—'} "
                f"({tenuti[0]['punteggio'] if tenuti else 0})")
     if report:
         invia_report(cfg)
+
+
+def _raccogli(cfg, f, add):
+    log(AGENT, "=== avvio ricerca famiglia ===")
+    add("Subito.it", lambda: subito(f))
+    add("Tecnocasa", lambda: tecnocasa(f))
+    comuni = [c.split("/")[-1] for c in f["tecnocasa_comuni"]]
+    add("Gabetti", lambda: fonti_extra.gabetti(dict(f, locali_max=99), comuni))
+    add("Dove.it", lambda: fonti_extra.dove(dict(f, locali_max=99), comuni))
+    add("Casavo", lambda: fonti_extra.casavo(dict(f, locali_max=99)))
+    add("Immobiliare.it", lambda: fonti.immobiliare_email(cfg, dict(f, locali_max=99), "famiglia"))
 
 
 # ------------------------------------------------------------------ report
@@ -288,12 +324,16 @@ def invia_report(cfg):
     righe_h, righe_t = [], []
     for i, a in enumerate(top, 1):
         c = a["caratteristiche"]
-        info = (f"{_eur(a['prezzo'])} · {a['mq']:.0f} mq · {c['camere'] or '?'} camere"
+        info = (f"{a.get('zona', '')} · {_eur(a['prezzo'])} · {a['mq']:.0f} mq · {c['camere'] or '?'} camere"
                 f"{' (stima)' if c['camere_stimate'] else ''} · {c['bagni'] or '?'} bagni · {a['comune']}")
         nuovo = " 🆕" if a.get("prima_vista", "")[:10] == oggi else ""
         righe_t.append(f"{i}. [{a['punteggio']:.0f}] {a['titolo']}{nuovo}\n   {info}\n"
-                       f"   Plus: {', '.join(a['plus']) or '—'}\n   {a['url']}\n")
-        chips = "".join(f'<span style="background:#e5f3eb;color:#1f7a4d;border-radius:99px;padding:1px 8px;'
+                       f"   Bimbi: {', '.join(a.get('plus_bimbi', [])) or '—'} · Plus: {', '.join(a['plus']) or '—'}\n"
+                       f"   {a['url']}\n")
+        chips = "".join(f'<span style="background:#e6eefb;color:#2b5aa8;border-radius:99px;padding:1px 8px;'
+                        f'margin:0 4px 4px 0;display:inline-block;font-size:12px">{html.escape(p)}</span>'
+                        for p in a.get("plus_bimbi", []))
+        chips += "".join(f'<span style="background:#e5f3eb;color:#1f7a4d;border-radius:99px;padding:1px 8px;'
                         f'margin:0 4px 4px 0;display:inline-block;font-size:12px">{html.escape(p)}</span>'
                         for p in a["plus"])
         chips += "".join(f'<span style="background:#fbf0dc;color:#a86a00;border-radius:99px;padding:1px 8px;'
@@ -339,4 +379,4 @@ Fonti: {html.escape(fonti_txt)}</p><table style="border-collapse:collapse;width:
 
 
 if __name__ == "__main__":
-    run(report="--report" in sys.argv)
+    run(report="--report" in sys.argv, solo_valuta="--solo-valuta" in sys.argv)

@@ -40,6 +40,9 @@ header{display:flex;flex-wrap:wrap;gap:16px;justify-content:space-between;align-
   background:var(--surface-2);color:var(--ink-2);white-space:nowrap}
 .chip.good{background:var(--good-soft);color:var(--good)} .chip.warn{background:var(--warn-soft);color:var(--warn)}
 .chip.bad{background:var(--bad-soft);color:var(--bad)}
+.chip.kid{background:#e6eefb;color:#2b5aa8}
+@media (prefers-color-scheme:dark){.chip.kid{background:#1d2a40;color:#8fb3ef}}
+.zone{color:var(--ink)}
 .filters{display:flex;flex-wrap:wrap;gap:8px 16px;align-items:center;background:var(--surface);border:1px solid var(--line);
   border-radius:var(--radius);padding:12px 14px;margin-bottom:14px;font-size:13px}
 .filters label{display:inline-flex;gap:6px;align-items:center}
@@ -74,15 +77,20 @@ header{display:flex;flex-wrap:wrap;gap:16px;justify-content:space-between;align-
       <div class="small" style="margin-top:8px"><a href="index.html">← Mono e bilocali universitari</a></div>
     </div>
     <div>
-      <button class="btn primary" id="btnRun">Nuova ricerca</button>
+      <div style="display:flex;gap:8px;justify-content:flex-end">
+        <button class="btn" id="btnVal" title="Ricalcola i punteggi sugli annunci già raccolti">Ricalcola</button>
+        <button class="btn primary" id="btnRun">Nuova ricerca</button>
+      </div>
       <div class="status" id="status"></div>
     </div>
   </header>
   <pre class="log" id="log" hidden></pre>
-  <p class="muted small" style="margin-top:0">Requisiti: 3+ camere, 2 bagni, salone, cucina abitabile (in giallo se mancano o non risultano dall'annuncio).
-    Plus in verde: terrazzo, balcone, box, aria condizionata, domotica, ristrutturato. Il punteggio 0–100 considera anche
-    il prezzo al mq rispetto al comune e la metratura.</p>
+  <p class="muted small" style="margin-top:0">Priorità: prima la posizione (Centro › Semicentro › Periferia Milano › Cintura),
+    poi i requisiti — 3+ camere, 2 bagni, salone, cucina abitabile (in giallo se mancano o non risultano dall'annuncio) —,
+    i plus per i bambini in blu (piscina, area giochi/campi, spazi comuni attrezzati) e gli altri plus in verde
+    (terrazzo, balcone, box, aria condizionata, domotica, ristrutturato). Contano anche prezzo al mq e metratura.</p>
   <div class="filters">
+    <label>Zona <select id="fZona"><option value="">Tutte</option><option>Centro</option><option>Semicentro</option><option>Periferia Milano</option><option>Cintura</option></select></label>
     <label>Comune <select id="fComune"><option value="">Tutti</option></select></label>
     <label>Prezzo max <input type="number" id="fPrezzo" step="50000" placeholder="€"></label>
     <label><input type="checkbox" id="fReq"> Solo con tutti i requisiti</label>
@@ -114,9 +122,9 @@ async function load(){
 
 function render(){
   const oggi = D.aggiornato.slice(0,10);
-  const com = $("#fComune").value, pmax = +$("#fPrezzo").value || Infinity;
+  const zn = $("#fZona").value, com = $("#fComune").value, pmax = +$("#fPrezzo").value || Infinity;
   const all = [...D.top, ...D.altri].filter(a =>
-    (!com || a.comune === com) && a.prezzo <= pmax &&
+    (!zn || a.zona === zn) && (!com || a.comune === com) && a.prezzo <= pmax &&
     (!$("#fReq").checked || !a.mancano.length) &&
     (!$("#fNuovi").checked || (a.prima_vista||"").slice(0,10) === oggi));
   $("#fCount").textContent = `${all.length} risultati`;
@@ -129,6 +137,7 @@ function card(a, i, oggi){
   const calo = storico.length > 1 && storico[0].prezzo > a.prezzo ? Math.round(100*(1 - a.prezzo/storico[0].prezzo)) : 0;
   const tags = [
     ...((a.prima_vista||"").slice(0,10) === oggi ? [`<span class="chip good">Nuovo</span>`] : []),
+    ...(a.plus_bimbi||[]).map(p => `<span class="chip kid">${esc(p)}</span>`),
     ...a.plus.map(p => `<span class="chip good">${esc(p)}</span>`),
     ...a.mancano.map(m => `<span class="chip warn">manca: ${esc(m)}</span>`),
     ...(calo ? [`<span class="chip good">Prezzo −${calo}%</span>`] : []),
@@ -141,7 +150,7 @@ function card(a, i, oggi){
     <a href="${esc(a.url)}" target="_blank" rel="noopener">${a.immagini?.[0] ? `<img class="thumb" loading="lazy" src="${esc(a.immagini[0])}" alt="">` : `<div class="thumb"></div>`}</a>
     <div>
       <div class="title">${esc(a.titolo)}</div>
-      <div class="muted small">${esc(a.indirizzo || a.comune)} · ${a.km_centro} km dal Duomo</div>
+      <div class="muted small"><b class="zone">${esc(a.zona || "")}</b> · ${esc(a.indirizzo || a.comune)} · ${a.km_centro} km dal Duomo</div>
       <div class="facts num">
         <span><b>${eur(a.prezzo)}</b></span><span><b>${Math.round(a.mq)}</b> mq</span>
         <span>${eur(a.prezzo_mq)}/mq${a.sconto_zona_pct != null ? ` (${a.sconto_zona_pct > 0 ? "−" : "+"}${Math.abs(a.sconto_zona_pct)}% vs comune)` : ""}</span>
@@ -156,15 +165,17 @@ function card(a, i, oggi){
   </div>`;
 }
 
-["#fComune","#fPrezzo","#fReq","#fNuovi"].forEach(s => $(s).addEventListener("input", () => { pref("comune", $("#fComune").value); render(); }));
+["#fZona","#fComune","#fPrezzo","#fReq","#fNuovi"].forEach(s => $(s).addEventListener("input", () => { pref("comune", $("#fComune").value); render(); }));
 
-$("#btnRun").onclick = async () => {
-  await fetch("/api/famiglia/ricerca",{method:"POST",headers:{"Content-Type":"application/json"},body:"{}"});
+async function run(solo){
+  await fetch("/api/famiglia/ricerca",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({solo_valuta:solo})});
   poll();
-};
+}
+$("#btnRun").onclick = () => run(false);
+$("#btnVal").onclick = () => run(true);
 async function poll(){
   const s = await (await fetch("/api/stato")).json();
-  $("#btnRun").disabled = s.in_corso;
+  $("#btnRun").disabled = $("#btnVal").disabled = s.in_corso;
   $("#log").hidden = !s.in_corso;
   $("#log").textContent = s.log.join("\n"); $("#log").scrollTop = 1e9;
   $("#status").textContent = s.in_corso ? "Ricerca in corso…" : s.errore ? "Errore: " + s.errore : "";

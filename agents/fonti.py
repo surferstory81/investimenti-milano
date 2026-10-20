@@ -338,6 +338,7 @@ def _tecnocasa_detail(url, base):
         anno_costruzione=ft.get("build_year"),
         metro_vicina=f"{metro[0]['name']} ({metro[0]['distance']})" if metro else None,
         camere=ft.get("bedrooms"), terrazzi=ft.get("terraces"), box=ft.get("box"),
+        giardino=ft.get("garden"),
         anno_ristrutturazione=ft.get("inside_renovation_year") or ft.get("renovation_year"),
     )
     return base

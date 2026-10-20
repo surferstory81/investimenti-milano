@@ -171,18 +171,22 @@
       "monza-brianza/monza"
     ],
     "pesi": {
-      "camere": 16,
-      "bagni": 12,
-      "salone": 10,
-      "cucina_abitabile": 10,
-      "terrazzo": 6,
-      "balcone": 3,
-      "box": 6,
-      "aria_condizionata": 4,
-      "domotica": 3,
-      "ristrutturato": 8,
-      "prezzo": 15,
-      "metratura": 7
+      "posizione": 28,
+      "camere": 12,
+      "bagni": 9,
+      "salone": 7,
+      "cucina_abitabile": 7,
+      "piscina": 4,
+      "area_giochi": 3,
+      "spazi_comuni": 3,
+      "terrazzo": 4,
+      "balcone": 2,
+      "box": 4,
+      "aria_condizionata": 3,
+      "domotica": 2,
+      "ristrutturato": 5,
+      "prezzo": 7,
+      "metratura": 3
     }
   }
 }

@@ -76,7 +76,9 @@ class Handler(SimpleHTTPRequestHandler):
             if self.path == "/api/famiglia/ricerca":
                 if STATO["in_corso"]:
                     return self._json({"ok": False, "messaggio": "ricerca già in corso"})
-                threading.Thread(target=_pipeline_bg, args=(False, famiglia.run), daemon=True).start()
+                solo = bool(b.get("solo_valuta"))
+                threading.Thread(target=_pipeline_bg, daemon=True,
+                                 args=(False, lambda: famiglia.run(solo_valuta=solo))).start()
                 return self._json({"ok": True})
             if self.path == "/api/selezione":
                 save_json("selezione.json", list(dict.fromkeys(b.get("ids", []))))

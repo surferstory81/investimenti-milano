@@ -189,7 +189,7 @@ def casavo(f):
                 locali=str(int(locali)) if locali else None, camere=h.get("nbBedrooms"),
                 stato="Ottimo - ristrutturato" if ristrutturato else None,
                 ascensore=bool(h.get("hasLift")), box=1 if h.get("hasParking") else None,
-                balcone=bool(h.get("hasOutdoorSpace")),
+                balcone=bool(h.get("hasOutdoorSpace")), piscina=bool(h.get("hasPool")),
                 inserzionista="Casavo", agenzia=True, data_annuncio=h.get("firstPublication"),
                 immagini=[f"https://resize-picture-production.casavo.com/casavo/600x0/{p['dir']}raw_{p['name']}"
                           for p in (h.get("pictures") or [])[:6]]))
