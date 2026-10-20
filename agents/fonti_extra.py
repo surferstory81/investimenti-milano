@@ -12,7 +12,8 @@ AGENT = "Ricerca"
 
 
 def _ok(f, prezzo, locali):
-    return (prezzo and f["prezzo_min"] <= prezzo <= f["prezzo_max"]
+    """Prezzo e locali già numerici (None se assenti o non numerici)."""
+    return (isinstance(prezzo, (int, float)) and f["prezzo_min"] <= prezzo <= f["prezzo_max"]
             and (locali is None or f["locali_min"] <= locali <= f["locali_max"]))
 
 
@@ -80,7 +81,7 @@ def gabetti(f, comuni):
                 ft = a.get("features") or {}
                 locali = _num(a.get("rooms"))
                 if (a.get("typeSlug") not in ("appartamento", "attico", "loft", "mansarda")
-                        or not _ok(f, a.get("price"), locali)):
+                        or not _ok(f, _num(a.get("price")), locali)):
                     continue
                 stato = ft.get("property_condition")
                 out.append(base_record(
@@ -177,7 +178,7 @@ def casavo(f):
         pages = res.get("nbPages") or 1
         for h in res.get("hits") or []:
             locali = _num(h.get("nbPieces"))
-            if h.get("typeBien") not in ("flat", "attic", "loft", "mansard") or not _ok(f, h.get("prix"), locali):
+            if h.get("typeBien") not in ("flat", "attic", "loft", "mansard") or not _ok(f, _num(h.get("prix")), locali):
                 continue
             ristrutturato = h.get("withoutRenovationWork")
             out.append(base_record(
