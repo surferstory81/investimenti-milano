@@ -5,7 +5,7 @@
     "prezzo_min": 60000,
     "prezzo_max": 350000,
     "mq_min": 18,
-    "max_pagine": 40,
+    "max_pagine": 100,
     "raggio_universita_km": 1.6,
     "fonti": [
       "subito",
