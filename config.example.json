@@ -186,7 +186,8 @@
       "domotica": 2,
       "ristrutturato": 5,
       "prezzo": 7,
-      "metratura": 3
+      "metratura": 3,
+      "giardino_condominiale": 1
     }
   }
 }

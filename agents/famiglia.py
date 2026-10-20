@@ -49,9 +49,10 @@ BIMBI = [
      r"(?:parco|area|zona|spazio) (?:giochi|bimbi|bambini)|playground|giochi per bambini|ludoteca|"
      r"camp[oi] (?:da |di )?(?:calcio|calcetto|tennis|basket|pallavolo|padel|gioco)"),
     ("spazi_comuni", "Spazi comuni attrezzati",
-     r"giardino condominiale|parco condominiale|(?:area|spazio) verde (?:condominiale|comune)|"
      r"palestra (?:condominiale|comune|interna)|sala (?:comune|polifunzionale|feste|condominiale|hobby)|"
-     r"spazi comuni|kids room|area fitness|club house|clubhouse|co-?working condominiale"),
+     r"spazi comuni attrezzat|kids room|area fitness|club house|clubhouse|co-?working condominiale"),
+    ("giardino_condominiale", "Giardino condominiale",
+     r"giardino condominiale|parco condominiale|(?:area|spazio) verde (?:condominiale|comune)"),
 ]
 # fasce di posizione: (etichetta, km max dal Duomo, punteggio 0..1); fuori Milano = cintura
 ZONE = [("Centro", 2.5, 1.0), ("Semicentro", 5.0, 0.75), ("Periferia Milano", 99, 0.4)]
@@ -154,7 +155,7 @@ def caratteristiche(a):
     car["box"] |= bool(a.get("box"))
     car["aria_condizionata"] |= bool(a.get("aria_condizionata"))
     car["piscina"] |= bool(a.get("piscina"))
-    car["spazi_comuni"] |= "condominial" in (a.get("giardino") or "").lower()
+    car["giardino_condominiale"] |= "condominial" in (a.get("giardino") or "").lower()
     st = stato_norm(a.get("stato"), testo)
     car["ristrutturato"] |= st in ("ottimo", "nuovo") or bool(a.get("anno_ristrutturazione"))
     car["stato"] = st
