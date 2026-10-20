@@ -1,7 +1,9 @@
 """Utility condivise dagli agenti: config, IO dati, HTTP, geografia."""
 import json
 import math
+import os
 import random
+import ssl
 import time
 import urllib.request
 from datetime import datetime
@@ -10,6 +12,14 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 DATA = ROOT / "data"
 DATA.mkdir(exist_ok=True)
+
+# Nel container (Alpine) Python usa una lista di cifrari ridotta, diversa da
+# quella di sistema: SSL_CIPHERS la riallinea alla politica di docker/openssl.cnf.
+if os.environ.get("SSL_CIPHERS"):
+    _ctx = ssl.create_default_context()
+    _ctx.set_ciphers(os.environ["SSL_CIPHERS"])
+    urllib.request.install_opener(
+        urllib.request.build_opener(urllib.request.HTTPSHandler(context=_ctx)))
 
 UA = ("Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
       "(KHTML, like Gecko) Chrome/130.0 Safari/537.36")
