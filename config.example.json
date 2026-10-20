@@ -11,8 +11,10 @@
       "subito",
       "tecnocasa",
       "casa",
-      "idealista"
-    ]
+      "idealista",
+      "immobiliare_email"
+    ],
+    "immobiliare_email_giorni": 30
   },
   "universita": [
     {

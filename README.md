@@ -7,7 +7,7 @@ Solo ricalcolo:    pulsante "Ricalcola", oppure `python3 run.py --solo-valuta`
 ## Agenti
 | Agente | File | Cosa fa |
 |---|---|---|
-| Ricerca | `agents/ricerca.py`, `agents/fonti.py` | Monolocali in vendita da Subito.it, Tecnocasa, Casa.it, Idealista + affitti (per i canoni); tiene quelli entro `raggio_universita_km` da un ateneo |
+| Ricerca | `agents/ricerca.py`, `agents/fonti.py` | Monolocali in vendita da Subito.it, Tecnocasa, Casa.it, Idealista, Immobiliare.it (avvisi email) + affitti (per i canoni); tiene quelli entro `raggio_universita_km` da un ateneo |
 | Catalogatore | `agents/catalogatore.py` | Normalizza, estrae spese/email/telefono dal testo, scarta aste/nude proprietà/box, unisce i doppioni tra portali |
 | Valutatore | `agents/valutatore.py` | Punteggio 0-100: valore, rendimento netto, posizione, stato, costi, dimensione → top 20 |
 | Email | `agents/mailer.py` | Dopo la tua conferma sulla pagina scrive alle agenzie per chiedere un appuntamento |
@@ -15,7 +15,10 @@ Solo ricalcolo:    pulsante "Ricalcola", oppure `python3 run.py --solo-valuta`
 ## Fonti
 - **Subito.it, Tecnocasa**: HTTP diretto, stabili.
 - **Casa.it, Idealista**: Firefox headless, best-effort; se il portale chiede la verifica anti-bot vengono saltate (sulla pagina risultano "non disponibile").
-- **Immobiliare.it**: non supportato, blocca sempre con CAPTCHA.
+- **Immobiliare.it**: il sito blocca le visite automatiche (DataDome), quindi gli annunci arrivano
+  dagli **avvisi email**: su immobiliare.it salva una ricerca (Milano, monolocali, fascia di prezzo) e
+  attiva le notifiche "istantanee". L'agente legge via IMAP le email di `notifiche.immobiliare.it` degli
+  ultimi `ricerca.immobiliare_email_giorni` giorni (fonte `immobiliare_email`), con la stessa password per le app.
 
 ## Invio email reale (Gmail)
 1. Attiva la verifica in 2 passaggi sull'account Google.

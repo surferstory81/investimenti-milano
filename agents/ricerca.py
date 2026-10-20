@@ -3,7 +3,8 @@ alle università di Milano.
 
 Fonti: Subito.it e Tecnocasa (HTTP diretto), Casa.it e Idealista (Firefox
 headless, best-effort: se il portale chiede una verifica anti-bot la fonte viene
-saltata). Immobiliare.it non è supportato: blocca sempre con CAPTCHA."""
+saltata). Immobiliare.it blocca le visite automatiche con CAPTCHA: i suoi annunci
+arrivano dagli avvisi email delle ricerche salvate, letti via IMAP."""
 from datetime import datetime
 
 from . import fonti
@@ -33,6 +34,8 @@ def run():
         add("Subito.it", lambda: fonti.subito("vendita", cfg))
     if "tecnocasa" in attive:
         add("Tecnocasa", lambda: fonti.tecnocasa(cfg, None))
+    if "immobiliare_email" in attive:
+        add("Immobiliare.it", lambda: fonti.immobiliare_email(cfg))
     if "casa" in attive or "idealista" in attive:
         try:
             with Firefox() as ff:

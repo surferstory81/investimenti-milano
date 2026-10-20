@@ -1,5 +1,6 @@
 """Fonti di annunci usate dall'Agente Ricerca. Ogni fonte restituisce una lista
 di annunci normalizzati con lo stesso schema."""
+import hashlib
 import html as htmlmod
 import json
 import re
@@ -360,4 +361,94 @@ def tecnocasa(cfg, unis_filter):
         out.append(rec)
     geocode_all(out)
     log(AGENT, f"Tecnocasa: {len(out)} monolocali nel range di prezzo")
+    return out
+
+
+# ------------------------------------- Immobiliare.it (avvisi email via IMAP)
+# Immobiliare.it blocca le visite automatiche (DataDome), ma invia gli annunci
+# nuovi delle ricerche salvate per email: li leggiamo dalla casella Gmail.
+_IMM_BLOCCO = re.compile(
+    r"﻿?(?P<titolo>[^\n]+?)﻿?\s*\(\s*(?P<url>https://clicks\.immobiliare\.it/\S+)\s*\)"
+    r"(?P<corpo>(?:(?!https://clicks).)*?)VEDI DETTAGLI", re.S)
+
+
+def _imm_url(click):
+    """Il link dell'email è un redirect di tracciamento: ne leggiamo solo la
+    destinazione (senza visitare immobiliare.it) per avere l'ID dell'annuncio."""
+    class NoRedirect(urllib.request.HTTPRedirectHandler):
+        def redirect_request(self, *a, **kw):
+            return None
+    opener = urllib.request.build_opener(NoRedirect)
+    try:
+        opener.open(urllib.request.Request(
+            click, headers={"User-Agent": "investimenti-milano/1.0"}), timeout=15)
+    except urllib.error.HTTPError as e:
+        loc = e.headers.get("Location") or ""
+        m = re.search(r"immobiliare\.it/annunci/(\d+)", loc)
+        if m:
+            return m.group(1), f"https://www.immobiliare.it/annunci/{m.group(1)}/"
+    except Exception:
+        pass
+    return None, click
+
+
+def _imm_parse(testo):
+    out = []
+    for b in _IMM_BLOCCO.finditer(testo):
+        corpo = htmlmod.unescape(b["corpo"])
+        prezzo = re.search(r"€\s*([\d.]+)", corpo)
+        mq = re.search(r"(\d+)\s*m(?:²|2)", corpo)
+        locali = re.search(r"(\d+)\s*local", corpo)
+        bagni = re.search(r"(\d+)\s*bagn", corpo)
+        titolo = b["titolo"].strip()
+        # "Monolocale via Tal dei Tali 8, Quartiere, Milano" -> indirizzo dopo la tipologia
+        indirizzo = re.sub(r"^\S+\s+", "", titolo)
+        out.append(dict(titolo=titolo, click=b["url"], indirizzo=indirizzo,
+                        prezzo=_num_it(prezzo.group(1)) if prezzo else None,
+                        mq=_num(mq.group(1)) if mq else None,
+                        locali=locali.group(1) if locali else ("1" if "monolocale" in titolo.lower() else None),
+                        bagni=bagni.group(1) if bagni else None))
+    return out
+
+
+def immobiliare_email(cfg):
+    import email
+    import imaplib
+    from datetime import datetime, timedelta
+    e, r = cfg["email"], cfg["ricerca"]
+    if not e.get("password_app"):
+        raise RuntimeError("serve email.password_app in config.json")
+    giorni = r.get("immobiliare_email_giorni", 30)
+    dal = (datetime.now() - timedelta(days=giorni)).strftime("%d-%b-%Y")
+    M = imaplib.IMAP4_SSL(e.get("imap_host", "imap.gmail.com"))
+    M.login(e["utente"], e["password_app"].replace(" ", ""))
+    M.select("INBOX", readonly=True)
+    _, d = M.search(None, "FROM", "notifiche.immobiliare.it", "SINCE", dal)
+    trovati = {}
+    for num in d[0].split():
+        _, m = M.fetch(num, "(BODY.PEEK[])")
+        msg = email.message_from_bytes(m[0][1])
+        for p in msg.walk():
+            if p.get_content_type() == "text/plain":
+                testo = p.get_payload(decode=True).decode(p.get_content_charset() or "utf-8", "replace")
+                for x in _imm_parse(testo):
+                    trovati[x["click"]] = x
+    M.logout()
+
+    out, visti = [], set()
+    for x in trovati.values():
+        if not x["prezzo"] or not (r["prezzo_min"] <= x["prezzo"] <= r["prezzo_max"]):
+            continue
+        if x["locali"] and not (r["locali_min"] <= int(x["locali"]) <= r["locali_max"]):
+            continue
+        ann_id, url = _imm_url(x["click"])
+        if (ann_id or url) in visti:
+            continue
+        visti.add(ann_id or url)
+        out.append(base_record(
+            id="immobiliare-" + (ann_id or hashlib.sha1(url.encode()).hexdigest()[:12]), fonte="Immobiliare.it", url=url,
+            titolo=x["titolo"], indirizzo=x["indirizzo"], prezzo=x["prezzo"],
+            mq=x["mq"], locali=x["locali"], bagni=x["bagni"]))
+    geocode_all(out)
+    log(AGENT, f"Immobiliare.it (avvisi email ultimi {giorni} giorni): {len(out)} annunci nel range")
     return out
