@@ -504,7 +504,11 @@ def _imap(cfg):
         raise RuntimeError(f"serve avvisi.password_app in config.json per {e.get('utente')}")
     M = imaplib.IMAP4_SSL(e.get("imap_host", "imap.gmail.com"))
     M.login(e["utente"], e["password_app"].replace(" ", ""))
-    M.select("INBOX", readonly=True)
+    # in Gmail l'archivio completo ("Tutti i messaggi", flag \All) include anche
+    # le email archiviate o etichettate da un filtro; altrimenti la Posta in arrivo
+    _, cartelle = M.list()
+    tutte = [re.search(rb'"([^"]+)"$', c) for c in cartelle or [] if rb"\\All" in c]
+    M.select(f'"{tutte[0].group(1).decode()}"' if tutte and tutte[0] else "INBOX", readonly=True)
     return M
 
 
