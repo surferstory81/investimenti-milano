@@ -486,8 +486,14 @@ def _imm_email(cfg, giorni):
 
 
 def profilo_ricerca(nome):
-    """Ricerche salvate sui portali: "famiglia"/"family" nel nome → profilo famiglia."""
-    return "famiglia" if re.search(r"famigli|family", nome or "", re.I) else "studenti"
+    """Profilo indicato dal nome della ricerca salvata ("Famiglia"/"Family" o
+    "Studenti"/"Investimento"); None se il nome non lo dice: in quel caso
+    l'annuncio va a entrambi i profili e decidono i rispettivi filtri."""
+    if re.search(r"famigli|family", nome or "", re.I):
+        return "famiglia"
+    if re.search(r"student|investiment", nome or "", re.I):
+        return "studenti"
+    return None
 
 
 def _imap(cfg):
@@ -509,7 +515,7 @@ def immobiliare_email(cfg, r=None, profilo="studenti"):
     giorni = r.get("immobiliare_email_giorni", 30)
     out, visti = [], set()
     for x in _imm_email(cfg, giorni):
-        if profilo_ricerca(x["ricerca"]) != profilo:
+        if profilo_ricerca(x["ricerca"]) not in (None, profilo):
             continue
         if not x["prezzo"] or not (r["prezzo_min"] <= x["prezzo"] <= r["prezzo_max"]):
             continue
@@ -575,7 +581,7 @@ def casa_email(cfg, r=None, profilo="studenti"):
     M.logout()
     out = []
     for x in trovati.values():
-        if profilo_ricerca(x["ricerca"]) != profilo:
+        if profilo_ricerca(x["ricerca"]) not in (None, profilo):
             continue
         if not x["prezzo"] or not (r["prezzo_min"] <= x["prezzo"] <= r["prezzo_max"]):
             continue
