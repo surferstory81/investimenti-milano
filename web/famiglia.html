@@ -98,6 +98,8 @@ header{display:flex;flex-wrap:wrap;gap:16px;justify-content:space-between;align-
     <span class="muted" id="fCount"></span>
   </div>
   <div id="list"></div>
+  <h2 id="avvisiTit" hidden>Dagli avvisi email <span class="muted small">· Immobiliare.it e Casa.it: senza descrizione, salone, cucina e plus sono da verificare sull'annuncio</span></h2>
+  <div id="avvisi"></div>
 </div>
 <script>
 const $ = s => document.querySelector(s);
@@ -129,6 +131,10 @@ function render(){
     (!$("#fNuovi").checked || (a.prima_vista||"").slice(0,10) === oggi));
   $("#fCount").textContent = `${all.length} risultati`;
   $("#list").innerHTML = all.length ? all.map((a,i) => card(a, i+1, oggi)).join("") : `<div class="empty">Nessun risultato con questi filtri.</div>`;
+  const av = (D.avvisi||[]).filter(a => (!zn || a.zona === zn) && (!com || a.comune === com) && a.prezzo <= pmax &&
+    (!$("#fNuovi").checked || (a.prima_vista||"").slice(0,10) === oggi));
+  $("#avvisiTit").hidden = !av.length;
+  $("#avvisi").innerHTML = av.map((a,i) => card(a, i+1, oggi)).join("");
 }
 
 function card(a, i, oggi){
@@ -140,6 +146,7 @@ function card(a, i, oggi){
     ...(a.plus_bimbi||[]).map(p => `<span class="chip kid">${esc(p)}</span>`),
     ...a.plus.map(p => `<span class="chip good">${esc(p)}</span>`),
     ...a.mancano.map(m => `<span class="chip warn">manca: ${esc(m)}</span>`),
+    ...(a.da_verificare||[]).map(m => `<span class="chip">da verificare: ${esc(m)}</span>`),
     ...(calo ? [`<span class="chip good">Prezzo −${calo}%</span>`] : []),
     ...a.segnali.filter(s => s.tipo !== "positivo" || /ribassato/.test(s.etichetta)).map(s =>
       `<span class="chip ${s.tipo === "attenzione" ? "warn" : s.tipo === "esclusione" ? "bad" : "good"}">${esc(s.etichetta)}</span>`),

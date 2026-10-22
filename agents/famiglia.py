@@ -20,6 +20,7 @@ from .common import DATA, haversine_km, http_get, load_config, load_json, log, m
 from .mailer import smtp_connessione
 
 AGENT = "Famiglia"
+FONTI_EMAIL = ("Immobiliare.it", "Casa.it")  # annunci dagli avvisi: senza descrizione
 CENTRO = (45.4642, 9.1900)  # Duomo
 SUBITO = "https://www.subito.it/annunci-lombardia/vendita/appartamenti/{prov}/"
 TECNOCASA = "https://www.tecnocasa.it/annunci/immobili/lombardia/{comune}.html"
@@ -138,11 +139,11 @@ def tecnocasa(f):
 # ------------------------------------------------------------------ analisi
 def caratteristiche(a):
     testo = f"{a.get('titolo') or ''}\n{a.get('descrizione') or ''}".lower()
-    car = {}
+    car = {"testo": len(a.get("descrizione") or "") >= 80}  # gli avvisi email non hanno descrizione
     camere = _n(a.get("camere")) or _da_testo(_N + r"\s+(?:ampie\s+|grandi\s+)?camer[ae]", testo)
     car["camere_stimate"] = camere is None
     if camere is None and _n(a.get("locali")):
-        camere = max(_n(a["locali"]) - 2, 1)  # 5 locali ≈ salone + cucina + 3 camere
+        camere = max(_n(a["locali"]) - 1, 1)  # sugli annunci Tecnocasa: 4 locali ≈ salone + 3 camere
     car["camere"] = camere
     bagni = _n(a.get("bagni")) or _da_testo(_N + r"\s+(?:bagni|servizi)", testo)
     if bagni is None and re.search(r"doppi servizi|doppio bagno", testo):
@@ -182,8 +183,10 @@ def valuta(a, med_comune, f):
     if c["camere_stimate"]:
         s["camere"] *= 0.7
     s["bagni"] = p["bagni"] * (1 if (c["bagni"] or 0) >= f["bagni_min"] else 0.4 if c["bagni"] is None else 0)
-    s["salone"] = p["salone"] * c["salone"]
-    s["cucina_abitabile"] = p["cucina_abitabile"] * c["cucina_abitabile"]
+    # senza descrizione salone e cucina non si possono verificare: metà punteggio
+    ignoto = 0.5 if not c.get("testo", True) else 0
+    s["salone"] = p["salone"] * (1 if c["salone"] else ignoto)
+    s["cucina_abitabile"] = p["cucina_abitabile"] * (1 if c["cucina_abitabile"] else ignoto)
     # plus
     for k, _, _ in PLUS + BIMBI:
         s[k] = p[k] * c[k]
@@ -201,9 +204,15 @@ def valuta(a, med_comune, f):
     tot = sum(p.values())
     a["punteggi"] = {k: round(v, 1) for k, v in s.items()}
     a["punteggio"] = round(100 * sum(s.values()) / tot, 1)
-    a["mancano"] = [et for k, et in (("camere", f"{f['camere_min']}+ camere"), ("bagni", f"{f['bagni_min']} bagni"),
-                                      ("salone", "Salone"), ("cucina_abitabile", "Cucina abitabile"))
-                    if s[k] < p[k]]
+    req = (("camere", f"{f['camere_min']}+ camere"), ("bagni", f"{f['bagni_min']} bagni"),
+           ("salone", "Salone"), ("cucina_abitabile", "Cucina abitabile"))
+    da_verificare = {"salone", "cucina_abitabile"} if ignoto else set()
+    if c["camere_stimate"] and (c["camere"] or 0) >= f["camere_min"]:
+        da_verificare.add("camere")
+    if c["bagni"] is None:
+        da_verificare.add("bagni")
+    a["da_verificare"] = [et for k, et in req if k in da_verificare]
+    a["mancano"] = [et for k, et in req if s[k] < p[k] and et not in a["da_verificare"]]
     a["plus"] = [et for k, et, _ in PLUS if c[k]]
     a["plus_bimbi"] = [et for k, et, _ in BIMBI if c[k]]
 
@@ -285,9 +294,10 @@ def run(report=False, solo_valuta=False):
 
     tenuti.sort(key=lambda a: -a["punteggio"])
     n = f.get("top", 30)
+    avvisi = [a for a in tenuti if a["fonte"] in FONTI_EMAIL]
     save_json("famiglia.json", {"aggiornato": now, "per_fonte": per_fonte,
                                 "totale_valutati": len(tenuti), "scartati": scartati,
-                                "top": tenuti[:n], "altri": tenuti[n:n + 300]})
+                                "top": tenuti[:n], "altri": tenuti[n:n + 300], "avvisi": avvisi})
     log(AGENT, f"raccolti {len(raccolti)} ({per_fonte}); valutati {len(tenuti)}, scartati {scartati}; "
                f"migliore: {tenuti[0]['titolo'][:60] if tenuti else '—'} "
                f"({tenuti[0]['punteggio'] if tenuti else 0})")
@@ -341,6 +351,9 @@ def invia_report(cfg):
         chips += "".join(f'<span style="background:#fbf0dc;color:#a86a00;border-radius:99px;padding:1px 8px;'
                          f'margin:0 4px 4px 0;display:inline-block;font-size:12px">manca: {html.escape(m)}</span>'
                          for m in a["mancano"])
+        chips += "".join(f'<span style="background:#f0eee8;color:#5c5b56;border-radius:99px;padding:1px 8px;'
+                         f'margin:0 4px 4px 0;display:inline-block;font-size:12px">da verificare: {html.escape(m)}</span>'
+                         for m in a.get("da_verificare", []))
         img = (f'<img src="{html.escape(a["immagini"][0])}" width="120" style="border-radius:6px;display:block">'
                if a.get("immagini") else "")
         righe_h.append(f"""<tr style="border-top:1px solid #e3e0d8">
@@ -349,6 +362,18 @@ def invia_report(cfg):
 <td style="padding:10px 8px;vertical-align:top"><a href="{html.escape(a['url'])}" style="color:#1f5f4a;font-weight:600">
 {html.escape(a['titolo'] or '')}</a>{nuovo}<div style="font-size:13px;color:#5c5b56;margin:3px 0 6px">{html.escape(info)}</div>{chips}</td>
 <td style="padding:10px 8px;text-align:right;vertical-align:top;font-size:20px;font-weight:700">{a['punteggio']:.0f}</td></tr>""")
+    avvisi = [a for a in d.get("avvisi", []) if a.get("prima_vista", "")[:10] == oggi][:10]
+    if avvisi:
+        righe_t.append("\nNUOVI DAGLI AVVISI EMAIL (dati parziali, da verificare)\n")
+        righe_h.append('<tr><td colspan="4" style="padding:18px 8px 4px;font-weight:700">Nuovi dagli avvisi email '
+                       '<span style="font-weight:400;color:#5c5b56;font-size:13px">· dati parziali, da verificare</span></td></tr>')
+        for a in avvisi:
+            info = f"{a.get('zona', '')} · {_eur(a['prezzo'])} · {a['mq']:.0f} mq · {a.get('locali') or '?'} locali · {a['comune']}"
+            righe_t.append(f"- {a['titolo']}\n  {info}\n  {a['url']}\n")
+            righe_h.append(f"""<tr style="border-top:1px solid #e3e0d8"><td></td><td></td>
+<td style="padding:8px"><a href="{html.escape(a['url'])}" style="color:#1f5f4a;font-weight:600">{html.escape(a['titolo'] or '')}</a>
+<div style="font-size:13px;color:#5c5b56">{html.escape(info)} · {html.escape(a['fonte'])}</div></td>
+<td style="padding:8px;text-align:right;color:#8b8a84">{a['punteggio']:.0f}</td></tr>""")
     fonti_txt = ", ".join(f"{k} {v}" for k, v in d["per_fonte"].items())
     oggetto = f"Casa famiglia Milano — {len(top)} migliori del {data}" + (f" ({nuovi} {'nuovo' if nuovi == 1 else 'nuovi'})" if nuovi else "")
     testo = (f"Ricerca casa per la famiglia aggiornata il {data}: {d['totale_valutati']} appartamenti valutati.\n"
