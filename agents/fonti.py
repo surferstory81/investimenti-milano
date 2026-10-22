@@ -549,8 +549,8 @@ def _casa_email_parse(h):
             r"(?P<titolo>[^\n]+(?:\n[^\n€]+)?)\n€\n(?P<prezzo>[\d.]+)\n(?P<corpo>.*?)Vedi \d+ foto", testo, re.S)):
         corpo = b["corpo"]
         g = lambda rx: re.search(rx, corpo)  # noqa: E731
-        mq, loc, bag = g(r"(\d+)\s*m²"), g(r"(\d+)\s*local"), g(r"(\d+)\s*bagn")
-        titolo = " ".join(b["titolo"].split("\n")[-2:]) if "\n" in b["titolo"] else b["titolo"]
+        mq, loc, bag = g(r"(\d+)\s*(?:m²|mq)"), g(r"(\d+)\s*local"), g(r"(\d+)\s*bagn")
+        titolo = ", ".join(x.strip().rstrip(",") for x in b["titolo"].split("\n")[-2:])
         out.append(dict(
             id=link[i] if i < len(link) else None, titolo=titolo,
             indirizzo=re.sub(r"^.*? in vendita (?:in )?", "", titolo).replace(" (MI)", ""),
