@@ -463,16 +463,10 @@ def _imm_email(cfg, giorni):
     """Annunci dagli avvisi di Immobiliare.it degli ultimi `giorni`, ciascuno con
     il nome della ricerca salvata che l'ha generato (campo "ricerca")."""
     import email
-    import imaplib
     from datetime import datetime, timedelta
     from email.header import decode_header, make_header
-    e = cfg["email"]
-    if not e.get("password_app"):
-        raise RuntimeError("serve email.password_app in config.json")
     dal = (datetime.now() - timedelta(days=giorni)).strftime("%d-%b-%Y")
-    M = imaplib.IMAP4_SSL(e.get("imap_host", "imap.gmail.com"))
-    M.login(e["utente"], e["password_app"].replace(" ", ""))
-    M.select("INBOX", readonly=True)
+    M = _imap(cfg)
     _, d = M.search(None, "FROM", "immobiliare.it", "SINCE", dal)
     trovati = {}
     for num in d[0].split():
@@ -497,10 +491,11 @@ def profilo_ricerca(nome):
 
 
 def _imap(cfg):
+    """Casella da cui leggere gli avvisi dei portali: config.json → avvisi."""
     import imaplib
-    e = cfg["email"]
+    e = cfg["avvisi"]
     if not e.get("password_app"):
-        raise RuntimeError("serve email.password_app in config.json")
+        raise RuntimeError(f"serve avvisi.password_app in config.json per {e.get('utente')}")
     M = imaplib.IMAP4_SSL(e.get("imap_host", "imap.gmail.com"))
     M.login(e["utente"], e["password_app"].replace(" ", ""))
     M.select("INBOX", readonly=True)

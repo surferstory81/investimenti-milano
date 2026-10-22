@@ -190,5 +190,10 @@
       "metratura": 3,
       "giardino_condominiale": 1
     }
+  },
+  "avvisi": {
+    "utente": "casella.avvisi@gmail.com",
+    "password_app": "",
+    "imap_host": "imap.gmail.com"
   }
 }

@@ -18,7 +18,7 @@ Solo ricalcolo:    pulsante "Ricalcola", oppure `python3 run.py --solo-valuta`
 - **Immobiliare.it**: il sito blocca le visite automatiche (DataDome), quindi gli annunci arrivano
   dagli **avvisi email**: su immobiliare.it salva una ricerca (Milano, 1-2 locali, fascia di prezzo) e
   attiva le notifiche "istantanee". L'agente legge via IMAP le email di `immobiliare.it` (avvisi istantanei o giornalieri) degli
-  ultimi `ricerca.immobiliare_email_giorni` giorni (fonte `immobiliare_email`), con la stessa password per le app.
+  ultimi `ricerca.immobiliare_email_giorni` giorni (fonte `immobiliare_email`), dalla casella in `config.json` → `avvisi` (utente + password per le app di quell'account).
 
 ## Invio email reale (Gmail)
 1. Attiva la verifica in 2 passaggi sull'account Google.
