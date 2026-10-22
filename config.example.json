@@ -15,10 +15,11 @@
       "immobiliare_email",
       "gabetti",
       "dove",
-      "casavo"
+      "casavo",
+      "casa_email"
     ],
     "immobiliare_email_giorni": 30,
-    "browser_max_pagine": 3
+    "browser_max_pagine": 1
   },
   "universita": [
     {

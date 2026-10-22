@@ -304,6 +304,7 @@ def _raccogli(cfg, f, add):
     add("Dove.it", lambda: fonti_extra.dove(dict(f, locali_max=99), comuni))
     add("Casavo", lambda: fonti_extra.casavo(dict(f, locali_max=99)))
     add("Immobiliare.it", lambda: fonti.immobiliare_email(cfg, dict(f, locali_max=99), "famiglia"))
+    add("Casa.it (avvisi)", lambda: fonti.casa_email(cfg, dict(f, locali_max=99), "famiglia"))
 
 
 # ------------------------------------------------------------------ report

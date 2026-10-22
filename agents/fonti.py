@@ -172,6 +172,9 @@ def casa(ff, cfg):
             try:
                 h = ff.get(url, wait=4)
                 m = re.search(r'window\.__INITIAL_STATE__ = JSON\.parse\((".*?")\);', h, re.S)
+                if not m:
+                    log(AGENT, f"Casa.it {tipo} pagina {page}: richiesta verifica anti-bot, interrompo")
+                    return out
                 s = json.loads(json.loads(m.group(1)))["search"]
             except Exception as e:
                 log(AGENT, f"Casa.it {tipo} pagina {page}: errore {e}")
@@ -282,14 +285,17 @@ def geocode_all(records):
     for r in records:
         if r["lat"] or not r["indirizzo"]:
             continue
-        parts = [p.strip() for p in r["indirizzo"].split(",")]
-        # prova indirizzo completo, poi via + Milano, poi quartiere + Milano
-        for q in (", ".join(parts), f"{parts[0]}, Milano", f"{parts[-2]}, Milano"
-                  if len(parts) > 2 else None):
+        parts = [p.strip() for p in r["indirizzo"].split(",") if p.strip()]
+        comune = parts[-1] if len(parts) > 1 and not re.search(r"\d", parts[-1]) else "Milano"
+        # indirizzo completo, via + comune, quartiere + comune, solo comune (fuori Milano)
+        for q in (", ".join(parts), f"{parts[0]}, {comune}",
+                  f"{parts[-2]}, {comune}" if len(parts) > 2 else None,
+                  comune if comune != "Milano" else None):
             if not q:
                 continue
             c = geocode(q, cache)
-            if c and 45.38 < c[0] < 45.56 and 9.04 < c[1] < 9.30:
+            # Milano e cintura (circa 15 km dal Duomo)
+            if c and 45.33 < c[0] < 45.60 and 9.00 < c[1] < 9.40:
                 r["lat"], r["lon"] = c
                 r["pin_preciso"] = q == ", ".join(parts) and any(ch.isdigit() for ch in parts[0])
                 break
@@ -485,6 +491,22 @@ def _imm_email(cfg, giorni):
     return list(trovati.values())
 
 
+def profilo_ricerca(nome):
+    """Ricerche salvate sui portali: "famiglia"/"family" nel nome → profilo famiglia."""
+    return "famiglia" if re.search(r"famigli|family", nome or "", re.I) else "studenti"
+
+
+def _imap(cfg):
+    import imaplib
+    e = cfg["email"]
+    if not e.get("password_app"):
+        raise RuntimeError("serve email.password_app in config.json")
+    M = imaplib.IMAP4_SSL(e.get("imap_host", "imap.gmail.com"))
+    M.login(e["utente"], e["password_app"].replace(" ", ""))
+    M.select("INBOX", readonly=True)
+    return M
+
+
 def immobiliare_email(cfg, r=None, profilo="studenti"):
     """Profilo "famiglia": solo le ricerche salvate con "famiglia" nel nome;
     profilo "studenti": tutte le altre."""
@@ -492,7 +514,7 @@ def immobiliare_email(cfg, r=None, profilo="studenti"):
     giorni = r.get("immobiliare_email_giorni", 30)
     out, visti = [], set()
     for x in _imm_email(cfg, giorni):
-        if ("famiglia" in x["ricerca"].lower()) != (profilo == "famiglia"):
+        if profilo_ricerca(x["ricerca"]) != profilo:
             continue
         if not x["prezzo"] or not (r["prezzo_min"] <= x["prezzo"] <= r["prezzo_max"]):
             continue
@@ -509,4 +531,65 @@ def immobiliare_email(cfg, r=None, profilo="studenti"):
             mq=x["mq"], locali=x["locali"], bagni=x["bagni"]))
     geocode_all(out)
     log(AGENT, f"Immobiliare.it {profilo} (avvisi email ultimi {giorni} giorni): {len(out)} annunci nel range")
+    return out
+
+
+# -------------------------------------------- Casa.it (avvisi email via IMAP)
+def _casa_email_parse(h):
+    """Avviso Casa.it (HTML): "per la tua ricerca <nome>", poi per ogni annuncio
+    titolo, "€ <prezzo>", "<mq> m²", "<n> locali", "<n> bagni", "Vedi N foto"."""
+    righe = [x.strip() for x in htmlmod.unescape(re.sub(r"<[^>]+>", "\n", re.sub(
+        r"<style.*?</style>", "", h, flags=re.S))).splitlines() if x.strip()]
+    testo = "\n".join(righe)
+    nome = re.search(r"per la tua ricerca\s+([^\n]+)", testo)
+    link = list(dict.fromkeys(re.findall(r"https://www\.casa\.it/immobili/(\d+)/", h)))
+    out = []
+    for i, b in enumerate(re.finditer(
+            r"(?P<titolo>[^\n]+(?:\n[^\n€]+)?)\n€\n(?P<prezzo>[\d.]+)\n(?P<corpo>.*?)Vedi \d+ foto", testo, re.S)):
+        corpo = b["corpo"]
+        g = lambda rx: re.search(rx, corpo)  # noqa: E731
+        mq, loc, bag = g(r"(\d+)\s*m²"), g(r"(\d+)\s*local"), g(r"(\d+)\s*bagn")
+        titolo = " ".join(b["titolo"].split("\n")[-2:]) if "\n" in b["titolo"] else b["titolo"]
+        out.append(dict(
+            id=link[i] if i < len(link) else None, titolo=titolo,
+            indirizzo=re.sub(r"^.*? in vendita (?:in )?", "", titolo).replace(" (MI)", ""),
+            prezzo=_num_it(b["prezzo"]), mq=_num(mq.group(1)) if mq else None,
+            locali=loc.group(1) if loc else None, bagni=bag.group(1) if bag else None,
+            box=bool(re.search(r"posti? auto|box", corpo)),
+            ricerca=(nome.group(1).strip() if nome else "")))
+    return out
+
+
+def casa_email(cfg, r=None, profilo="studenti"):
+    import email
+    from datetime import datetime, timedelta
+    r = r or cfg["ricerca"]
+    giorni = r.get("immobiliare_email_giorni", 30)
+    M = _imap(cfg)
+    dal = (datetime.now() - timedelta(days=giorni)).strftime("%d-%b-%Y")
+    _, d = M.search(None, "FROM", "noreply@casa.it", "SINCE", dal)
+    trovati = {}
+    for num in d[0].split():
+        _, m = M.fetch(num, "(BODY.PEEK[])")
+        for p in email.message_from_bytes(m[0][1]).walk():
+            if p.get_content_type() == "text/html":
+                for x in _casa_email_parse(p.get_payload(decode=True).decode(
+                        p.get_content_charset() or "utf-8", "replace")):
+                    if x["id"]:
+                        trovati[x["id"]] = x
+    M.logout()
+    out = []
+    for x in trovati.values():
+        if profilo_ricerca(x["ricerca"]) != profilo:
+            continue
+        if not x["prezzo"] or not (r["prezzo_min"] <= x["prezzo"] <= r["prezzo_max"]):
+            continue
+        if x["locali"] and not (r["locali_min"] <= int(x["locali"]) <= r["locali_max"]):
+            continue
+        out.append(base_record(
+            id=f"casa-{x['id']}", fonte="Casa.it", url=f"https://www.casa.it/immobili/{x['id']}/",
+            titolo=x["titolo"], indirizzo=x["indirizzo"], prezzo=x["prezzo"], mq=x["mq"],
+            locali=x["locali"], bagni=x["bagni"], box=1 if x["box"] else None))
+    geocode_all(out)
+    log(AGENT, f"Casa.it {profilo} (avvisi email ultimi {giorni} giorni): {len(out)} annunci nel range")
     return out

@@ -42,6 +42,8 @@ def run():
         add("Casavo", lambda: fonti_extra.casavo(cfg["ricerca"]))
     if "immobiliare_email" in attive:
         add("Immobiliare.it", lambda: fonti.immobiliare_email(cfg))
+    if "casa_email" in attive:
+        add("Casa.it (avvisi)", lambda: fonti.casa_email(cfg))
     if "casa" in attive or "idealista" in attive:
         try:
             with Firefox() as ff:
