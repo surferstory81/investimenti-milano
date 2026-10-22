@@ -3,7 +3,7 @@ ai destinatari in config.json → report.destinatari."""
 import html
 from datetime import datetime
 from email.message import EmailMessage
-from email.utils import formataddr, make_msgid
+from email.utils import formataddr, formatdate, make_msgid
 
 from .common import DATA, load_config, load_json, log
 from .mailer import smtp_connessione
@@ -26,7 +26,7 @@ def componi(c, cfg):
     fonti = ", ".join(f"{k} {v}" if v else f"{k} n.d." for k, v in c.get("per_fonte", {}).items())
     nuovi = sum(1 for a in top if a.get("nuovo_in_top"))
     oggetto = (f"Mono e bilocali universitari Milano — classifica del {data[:10]}"
-               + (f" ({nuovi} nuovi)" if nuovi else ""))
+               + (f" ({nuovi} {'nuovo' if nuovi == 1 else 'nuovi'})" if nuovi else ""))
 
     righe_txt, righe_html = [], []
     for a in top:
@@ -87,6 +87,7 @@ def run():
     msg["To"] = ", ".join(dest)
     msg["Subject"] = oggetto
     msg["Message-ID"] = make_msgid()
+    msg["Date"] = formatdate(localtime=True)
     msg.set_content(testo)
     msg.add_alternative(corpo_html, subtype="html")
     smtp = smtp_connessione(cfg)

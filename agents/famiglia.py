@@ -12,7 +12,7 @@ import re
 import sys
 from datetime import datetime
 from email.message import EmailMessage
-from email.utils import formataddr, make_msgid
+from email.utils import formataddr, formatdate, make_msgid
 
 from . import fonti, fonti_extra
 from .catalogatore import duplicati, segnali, stato_norm
@@ -350,7 +350,7 @@ def invia_report(cfg):
 {html.escape(a['titolo'] or '')}</a>{nuovo}<div style="font-size:13px;color:#5c5b56;margin:3px 0 6px">{html.escape(info)}</div>{chips}</td>
 <td style="padding:10px 8px;text-align:right;vertical-align:top;font-size:20px;font-weight:700">{a['punteggio']:.0f}</td></tr>""")
     fonti_txt = ", ".join(f"{k} {v}" for k, v in d["per_fonte"].items())
-    oggetto = f"Casa famiglia Milano — {len(top)} migliori del {data}" + (f" ({nuovi} nuovi)" if nuovi else "")
+    oggetto = f"Casa famiglia Milano — {len(top)} migliori del {data}" + (f" ({nuovi} {'nuovo' if nuovi == 1 else 'nuovi'})" if nuovi else "")
     testo = (f"Ricerca casa per la famiglia aggiornata il {data}: {d['totale_valutati']} appartamenti valutati.\n"
              f"Fonti: {fonti_txt}\n\n" + "\n".join(righe_t) + f"\nTutti i risultati: {url_dash}/famiglia.html\n")
     corpo = f"""<div style="font-family:system-ui,Segoe UI,Roboto,sans-serif;color:#1d1d1b;max-width:760px">
@@ -363,6 +363,7 @@ Fonti: {html.escape(fonti_txt)}</p><table style="border-collapse:collapse;width:
     msg["To"] = ", ".join(dest)
     msg["Subject"] = oggetto
     msg["Message-ID"] = make_msgid()
+    msg["Date"] = formatdate(localtime=True)
     msg.set_content(testo)
     msg.add_alternative(corpo, subtype="html")
     smtp = smtp_connessione(cfg)

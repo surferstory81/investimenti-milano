@@ -5,7 +5,7 @@ import smtplib
 import ssl
 from datetime import datetime
 from email.message import EmailMessage
-from email.utils import formataddr, make_msgid
+from email.utils import formataddr, formatdate, make_msgid
 
 from .common import DATA, load_config, load_json, log, save_json
 
@@ -91,6 +91,7 @@ def invia(bozze):
             msg["Bcc"] = e["utente"]  # copia per te
             msg["Subject"] = b["oggetto"]
             msg["Message-ID"] = make_msgid()
+            msg["Date"] = formatdate(localtime=True)
             msg.set_content(b["corpo"])
             now = datetime.now().isoformat(timespec="seconds")
             if attivo:
