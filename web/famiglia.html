@@ -62,7 +62,10 @@ header{display:flex;flex-wrap:wrap;gap:16px;justify-content:space-between;align-
 .empty{padding:60px 20px;text-align:center;color:var(--ink-2)}
 .like{appearance:none;border:0;background:none;cursor:pointer;font-size:22px;line-height:1;padding:2px 0 0;color:var(--ink-3)}
 .like.on{color:var(--bad)}
-.like:focus-visible{outline:2px solid var(--accent);border-radius:6px}
+.like:focus-visible,.scarta:focus-visible{outline:2px solid var(--accent);border-radius:6px}
+.scarta{appearance:none;border:0;background:none;cursor:pointer;font-size:13px;line-height:1;padding:2px 4px;color:var(--ink-3)}
+.scarta:hover{color:var(--bad)}
+.giudizio{display:inline-flex;gap:6px;align-items:center}
 @media (max-width:760px){
   .card{grid-template-columns:30px 1fr 56px}
   .card .thumb{display:none}
@@ -105,6 +108,7 @@ header{display:flex;flex-wrap:wrap;gap:16px;justify-content:space-between;align-
   <div id="list"></div>
   <h2 id="avvisiTit" hidden>Dagli avvisi email <span class="muted small">· Immobiliare.it, Casa.it e Idealista: descrizione assente o parziale, salone, cucina e plus sono da verificare sull'annuncio</span></h2>
   <div id="avvisi"></div>
+  <details id="scartBox" hidden style="margin-top:28px"><summary id="scartSum">Scartati da te</summary><div id="scartList" style="margin-top:10px"></div></details>
   <h2>Importa un annuncio</h2>
   <p class="muted small" style="max-width:760px">Casa.it, Idealista e Immobiliare.it non si aprono in automatico.
     Trascina questo pulsante nella barra dei preferiti: <a class="btn" id="bookmarklet" href="#">Importa annuncio</a>.
@@ -116,13 +120,14 @@ const $ = s => document.querySelector(s);
 const eur = n => n == null ? "—" : new Intl.NumberFormat("it-IT",{style:"currency",currency:"EUR",maximumFractionDigits:0}).format(n);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const dt = s => s ? new Date(s).toLocaleString("it-IT",{dateStyle:"medium",timeStyle:"short"}) : "—";
-let D = null, wasRunning = false, PREF = new Set();
+let D = null, wasRunning = false, G = {};  // giudizi famiglia: {id: {stato: mi_piace|scartato, ...}}
+const statoDi = id => G[id]?.stato;
 
 function pref(k, v){ try{ if(v===undefined) return localStorage.getItem("fam_"+k); localStorage.setItem("fam_"+k, v); }catch(e){} }
 
 async function load(){
   const [d, pr] = await Promise.all([fetch("/api/famiglia").then(r => r.json()), fetch("/api/preferiti").then(r => r.json())]);
-  D = d; PREF = new Set(Object.entries(pr || {}).filter(([, p]) => p.profilo === "famiglia").map(([id]) => id));
+  D = d; G = soloFamiglia(pr);
   if(!D){ $("#list").innerHTML = `<div class="empty">Nessun dato ancora. Premi <b>Nuova ricerca</b>.</div>`; $("#sub").textContent=""; return; }
   $("#sub").textContent = `Aggiornato ${dt(D.aggiornato)} · ${D.totale_valutati} appartamenti valutati`;
   $("#sources").innerHTML = Object.entries(D.per_fonte||{}).map(([k,v]) =>
@@ -137,14 +142,24 @@ async function load(){
   render();
 }
 
+function soloFamiglia(pr){ return Object.fromEntries(Object.entries(pr || {}).filter(([, p]) => p.profilo === "famiglia")); }
+
 function render(){
   const oggi = D.aggiornato.slice(0,10);
   const zn = $("#fZona").value, com = $("#fComune").value, qr = $("#fQuartiere").value, pmax = +$("#fPrezzo").value || Infinity;
   const ok = a => (!zn || a.zona === zn) && (!com || a.comune === com) && (!qr || a.zona_scelta === qr) && a.prezzo <= pmax &&
-    (!$("#fPref").checked || PREF.has(a.id)) && (!$("#fNuovi").checked || (a.prima_vista||"").slice(0,10) === oggi);
+    statoDi(a.id) !== "scartato" && (!$("#fPref").checked || statoDi(a.id) === "mi_piace") &&
+    (!$("#fNuovi").checked || (a.prima_vista||"").slice(0,10) === oggi);
   const all = [...D.top, ...D.altri].filter(a => ok(a) && (!$("#fReq").checked || !a.mancano.length));
   $("#fCount").textContent = `${all.length} risultati`;
-  $("#nPref").textContent = PREF.size ? `(${PREF.size})` : "";
+  const nLike = Object.values(G).filter(g => g.stato === "mi_piace").length;
+  $("#nPref").textContent = nLike ? `(${nLike})` : "";
+  const scart = Object.entries(G).filter(([, g]) => g.stato === "scartato");
+  $("#scartBox").hidden = !scart.length;
+  $("#scartSum").textContent = `Scartati da te (${scart.length})`;
+  $("#scartList").innerHTML = scart.map(([id, g]) => `<div class="small" style="margin:4px 0">
+    <button class="btn" style="padding:3px 9px" data-id="${esc(id)}" data-giudizio="scartato">Ripristina</button>
+    <a href="${esc(g.url)}" target="_blank" rel="noopener">${esc(g.titolo || id)}</a> <span class="muted">· ${eur(g.prezzo)}</span></div>`).join("");
   $("#list").innerHTML = all.length ? all.map((a,i) => card(a, i+1, oggi)).join("") : `<div class="empty">Nessun risultato con questi filtri.</div>`;
   const av = (D.avvisi||[]).filter(ok);
   $("#avvisiTit").hidden = !av.length;
@@ -184,8 +199,7 @@ function card(a, i, oggi){
         ${a.inserzionista ? `<span class="muted">${esc(a.inserzionista)}</span>` : ""}</div>
     </div>
     <div class="score"><b class="num">${Math.round(a.punteggio)}</b><span class="muted small">/100</span>
-      <div><button class="like ${PREF.has(a.id) ? "on" : ""}" data-like="${esc(a.id)}" aria-pressed="${PREF.has(a.id)}"
-        title="${PREF.has(a.id) ? "Togli dai preferiti" : "Mi piace"}">${PREF.has(a.id) ? "♥" : "♡"}</button></div></div>
+      <div class="giudizio">${giudizioBtns(a.id)}</div></div>
   </div>`;
 }
 
@@ -211,14 +225,24 @@ async function poll(){
 // segnalibro: legge la pagina che l'utente ha aperto e la passa a importa.html di
 // questa dashboard (in una nuova scheda; i dati viaggiano nel frammento #, mai in rete
 // verso terzi)
-// mi piace: delega sul documento (le schede vengono ridisegnate a ogni filtro)
+function giudizioBtns(id){
+  const on = statoDi(id) === "mi_piace";
+  return `<button class="like ${on ? "on" : ""}" data-id="${esc(id)}" data-giudizio="mi_piace" aria-pressed="${on}"
+      title="${on ? "Togli dai preferiti" : "Mi piace"}">${on ? "♥" : "♡"}</button>
+    <button class="scarta" data-id="${esc(id)}" data-giudizio="scartato" title="Scarta: non mostrarlo più">✕</button>`;
+}
+// mi piace / scarta: delega sul documento (le schede vengono ridisegnate a ogni filtro);
+// lo stesso pulsante cliccato due volte toglie il giudizio (es. "Ripristina")
 document.addEventListener("click", async e => {
-  const b = e.target.closest("[data-like]"); if (!b) return;
-  const id = b.dataset.like, on = !PREF.has(id);
-  const a = [...D.top, ...D.altri, ...(D.avvisi||[])].find(x => x.id === id);
-  on ? PREF.add(id) : PREF.delete(id); render();
-  await fetch("/api/preferiti", {method: "POST", headers: {"Content-Type": "application/json"},
-    body: JSON.stringify({id, profilo: "famiglia", mi_piace: on, annuncio: a})});
+  const b = e.target.closest("[data-giudizio]"); if (!b) return;
+  const id = b.dataset.id, stato = statoDi(id) === b.dataset.giudizio ? null : b.dataset.giudizio;
+  const a = [...D.top, ...D.altri, ...(D.avvisi||[])].find(x => x.id === id) || G[id];
+  if (stato) G[id] = {...(G[id]||{}), ...a, stato, profilo: "famiglia"}; else delete G[id];
+  render();
+  const r = await (await fetch("/api/preferiti", {method: "POST", headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({id, profilo: "famiglia", stato, annuncio: a})})).json();
+  if (r.preferiti) G = soloFamiglia(r.preferiti);
+  if (r.ricalcolo) poll(); else render();
 });
 $("#bookmarklet").href = "javascript:" + encodeURIComponent(`(()=>{const m=document.querySelector("main")||document.body;` +
   `const j=[...document.querySelectorAll('script[type="application/ld+json"]')].map(s=>s.textContent).join("\\n");` +

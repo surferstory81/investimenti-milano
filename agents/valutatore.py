@@ -10,6 +10,7 @@ compra per affittare a studenti. Sei criteri (0-100), pesati da config.json:
 """
 from datetime import datetime
 
+from . import preferiti
 from .common import load_config, load_json, log, median, percentile, save_json
 
 AGENT = "Valutatore"
@@ -205,8 +206,11 @@ def run():
     }
     valutati = sorted((valuta(a, ctx, cfg) for a in annunci),
                       key=lambda a: -a["valutazione"]["punteggio"])
+    scartati_utente = preferiti.ids("studenti", "scartato")  # "Scarta" dalla pagina
+    valutati = [a for a in valutati if a["id"] not in scartati_utente]
     for i, a in enumerate(valutati, 1):
         a["posizione_classifica"] = i
+    preferiti.aggiorna("studenti", valutati)
 
     # mantiene selezioni e stato email già esistenti
     prec = load_json("classifica.json", {}) or {}

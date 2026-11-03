@@ -92,8 +92,18 @@ class Handler(SimpleHTTPRequestHandler):
                 return self._json({"ok": True, "id": v["id"], "camere": v["camere"], "bagni": v["bagni"],
                                    "locali": v["locali"], "caratteri": len(v["testo"]), "ricalcolo": ricalcolo})
             if self.path == "/api/preferiti":
-                return self._json(preferiti.imposta(b.get("id"), b.get("profilo"), bool(b.get("mi_piace")),
-                                                    b.get("annuncio")))
+                # "stato": mi_piace | scartato | null (vecchio formato: "mi_piace": true/false)
+                stato = b["stato"] if "stato" in b else bool(b.get("mi_piace"))
+                prima = (preferiti.tutti().get(b.get("id")) or {}).get("stato")
+                p = preferiti.imposta(b.get("id"), b.get("profilo"), stato, b.get("annuncio"))
+                dopo = (p.get(b.get("id")) or {}).get("stato")
+                # scartare o ripristinare cambia la classifica: si ricalcola sui dati già raccolti
+                ricalcolo = "scartato" in (prima, dopo) and prima != dopo and not STATO["in_corso"]
+                if ricalcolo:
+                    fn = ((lambda: famiglia.run(solo_valuta=True)) if b.get("profilo") == "famiglia"
+                          else (lambda: pipeline(True)))
+                    threading.Thread(target=_pipeline_bg, args=(False, fn), daemon=True).start()
+                return self._json({"preferiti": p, "ricalcolo": ricalcolo})
             if self.path == "/api/selezione":
                 save_json("selezione.json", list(dict.fromkeys(b.get("ids", []))))
                 return self._json({"ok": True})

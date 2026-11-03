@@ -105,7 +105,10 @@ details>summary{cursor:pointer;font-weight:650;margin:28px 0 10px}
 .empty{padding:60px 20px;text-align:center;color:var(--ink-2)}
 .like{appearance:none;border:0;background:none;cursor:pointer;font-size:20px;line-height:1;padding:0;color:var(--ink-3)}
 .like.on{color:var(--bad)}
-.like:focus-visible{outline:2px solid var(--accent);border-radius:6px}
+.like:focus-visible,.scarta:focus-visible{outline:2px solid var(--accent);border-radius:6px}
+.scarta{appearance:none;border:0;background:none;cursor:pointer;font-size:13px;line-height:1;padding:2px 4px;color:var(--ink-3)}
+.scarta:hover{color:var(--bad)}
+.giudizio{display:inline-flex;gap:6px;align-items:center}
 @media (max-width:860px){
   .row{grid-template-columns:34px 1fr;}
   .row .thumb{display:none}
@@ -150,6 +153,8 @@ details>summary{cursor:pointer;font-weight:650;margin:28px 0 10px}
 
   <details><summary id="altriSum">Altri annunci valutati</summary>
     <div class="tablewrap"><table class="list" id="altri"></table></div></details>
+  <details id="scartUtBox" hidden><summary id="scartUtSum">Scartati da te</summary>
+    <div id="scartUt" style="padding:10px 0"></div></details>
   <details><summary id="scartSum">Annunci scartati</summary>
     <div class="tablewrap"><table class="list" id="scartati"></table></div></details>
 
@@ -170,14 +175,16 @@ const eur = n => n == null ? "—" : new Intl.NumberFormat("it-IT",{style:"curre
 const fmt = n => n == null ? "—" : new Intl.NumberFormat("it-IT",{maximumFractionDigits:1}).format(n);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const dt = s => s ? new Date(s).toLocaleString("it-IT",{dateStyle:"medium",timeStyle:"short"}) : "—";
-let D = null, SEL = new Set(), OPEN = new Set(), wasRunning = false, PREF = {};
+let D = null, SEL = new Set(), OPEN = new Set(), wasRunning = false, G = {};  // giudizi studenti
+const statoDi = id => G[id]?.stato;
+const soloStudenti = pr => Object.fromEntries(Object.entries(pr || {}).filter(([, p]) => p.profilo === "studenti"));
 
 const LABELS = {valore:"Valore",rendimento:"Rendimento",posizione:"Posizione",stato:"Stato",costi:"Costi",dimensione:"Dimensione"};
 const gClass = g => ({"Ottimo affare":"good","Interessante":"acc","Nella media":"warn"}[g] || "bad");
 
 async function load(){
   const [d, pr] = await Promise.all([fetch("/api/dati").then(r => r.json()), fetch("/api/preferiti").then(r => r.json())]);
-  D = d; PREF = pr || {};
+  D = d; G = soloStudenti(pr);
   SEL = new Set(D.selezione || []);
   render();
 }
@@ -188,7 +195,8 @@ function render(){
   $("#sub").textContent = `Aggiornato ${dt(c.aggiornato)} · ${c.totale_valutati} immobili valutati a Milano`;
   $("#sources").innerHTML = Object.entries(c.per_fonte||{}).map(([k,v]) =>
     `<span class="chip ${v? "":"warn"}">${esc(k)}: ${v ? v + " annunci" : "non disponibile"}</span>`).join("");
-  const top = c.top;
+  const top = c.top.filter(a => statoDi(a.id) !== "scartato");
+  const altri = c.altri.filter(a => statoDi(a.id) !== "scartato");
   const avg = f => top.length ? top.reduce((s,a)=>s+f(a),0)/top.length : null;
   $("#kpis").innerHTML = [
     [c.totale_valutati, "annunci valutati"],
@@ -201,15 +209,21 @@ function render(){
   $("#top").innerHTML = top.map(card).join("");
   // preferiti studenti: schede complete se sono ancora tra gli annunci valutati, altrimenti
   // la riga salvata (annuncio non più sui portali)
-  const valutati = Object.fromEntries([...top, ...c.altri].map(a => [a.id, a]));
-  const pref = Object.entries(PREF).filter(([, p]) => p.profilo === "studenti");
+  const valutati = Object.fromEntries([...top, ...altri].map(a => [a.id, a]));
+  const pref = Object.entries(G).filter(([, g]) => g.stato === "mi_piace");
   $("#prefBox").hidden = !pref.length;
   $("#pref").innerHTML = pref.map(([id, p]) => valutati[id] ? card(valutati[id]) :
-    `<div class="note warn">${likeBtn(id)} <a href="${esc(p.url)}" target="_blank" rel="noopener">${esc(p.titolo || id)}</a>
+    `<div class="note warn">${giudizioBtns(id)} <a href="${esc(p.url)}" target="_blank" rel="noopener">${esc(p.titolo || id)}</a>
        · ${eur(p.prezzo)} · non più tra gli annunci trovati oggi (venduto o ritirato?)</div>`).join("");
+  const scart = Object.entries(G).filter(([, g]) => g.stato === "scartato");
+  $("#scartUtBox").hidden = !scart.length;
+  $("#scartUtSum").textContent = `Scartati da te (${scart.length})`;
+  $("#scartUt").innerHTML = scart.map(([id, g]) => `<div class="small" style="margin:4px 0">
+    <button class="btn" style="padding:3px 9px" data-id="${esc(id)}" data-giudizio="scartato">Ripristina</button>
+    <a href="${esc(g.url)}" target="_blank" rel="noopener">${esc(g.titolo || id)}</a> <span class="muted">· ${eur(g.prezzo)}</span></div>`).join("");
   document.querySelectorAll(".card").forEach(el => {
     el.querySelector(".row").addEventListener("click", e => {
-      if (e.target.closest(".pick") || e.target.closest("a") || e.target.closest(".like")) return;
+      if (e.target.closest(".pick") || e.target.closest("a") || e.target.closest("[data-giudizio]")) return;
       el.classList.toggle("open");
       OPEN.has(el.dataset.id) ? OPEN.delete(el.dataset.id) : OPEN.add(el.dataset.id);
     });
@@ -221,9 +235,9 @@ function render(){
       `<tr><td>${esc(z)}</td><td>${v.annunci}</td><td>${eur(v.mediana_eur_mq)}</td><td>${eur(v.canone_mediano)}/mese</td><td>${fmt(v.canone_eur_mq)} €</td>
        <td>${v.canone_eur_mq ? fmt(v.canone_eur_mq*12/v.mediana_eur_mq*100)+"%" : "—"}</td></tr>`).join("");
 
-  $("#altriSum").textContent = `Altri annunci valutati (${c.altri.length})`;
+  $("#altriSum").textContent = `Altri annunci valutati (${altri.length})`;
   $("#altri").innerHTML = `<tr><th></th><th>#</th><th>Annuncio</th><th>Prezzo</th><th>mq</th><th>€/mq</th><th>Rend. netto</th><th>Punteggio</th><th>Visita</th></tr>` +
-    c.altri.map(a => `<tr><td>${likeBtn(a.id)}</td><td>${a.posizione_classifica}</td><td><a href="${esc(a.url)}" target="_blank" rel="noopener">${esc(a.titolo)}</a>
+    altri.map(a => `<tr><td class="giudizio">${giudizioBtns(a.id)}</td><td>${a.posizione_classifica}</td><td><a href="${esc(a.url)}" target="_blank" rel="noopener">${esc(a.titolo)}</a>
       <div class="small muted">${esc(a.fonte)} · ${esc(a.zona_universitaria)} ${fmt(a.distanza_uni_km)} km</div></td>
       <td>${eur(a.prezzo)}</td><td>${fmt(a.mq)}</td><td>${eur(a.prezzo_mq)}</td><td>${fmt(a.valutazione.rendimento_netto)}%</td>
       <td><b>${fmt(a.valutazione.punteggio)}</b></td>
@@ -236,18 +250,24 @@ function render(){
   dock();
 }
 
-function likeBtn(id){
-  const on = !!PREF[id];
-  return `<button class="like ${on ? "on" : ""}" data-like="${esc(id)}" aria-pressed="${on}" title="${on ? "Togli dai preferiti" : "Mi piace"}">${on ? "♥" : "♡"}</button>`;
+function giudizioBtns(id){
+  const on = statoDi(id) === "mi_piace";
+  return `<button class="like ${on ? "on" : ""}" data-id="${esc(id)}" data-giudizio="mi_piace" aria-pressed="${on}"
+      title="${on ? "Togli dai preferiti" : "Mi piace"}">${on ? "♥" : "♡"}</button><button class="scarta" data-id="${esc(id)}"
+      data-giudizio="scartato" title="Scarta: non mostrarlo più in classifica">✕</button>`;
 }
+// mi piace / scarta; lo stesso pulsante due volte toglie il giudizio (es. "Ripristina")
 document.addEventListener("click", async e => {
-  const b = e.target.closest("[data-like]"); if (!b) return;
+  const b = e.target.closest("[data-giudizio]"); if (!b) return;
   e.stopPropagation();
-  const id = b.dataset.like, on = !PREF[id], c = D.classifica;
-  const a = [...c.top, ...c.altri].find(x => x.id === id) || PREF[id] || {};
-  PREF = await (await fetch("/api/preferiti", {method: "POST", headers: {"Content-Type": "application/json"},
-    body: JSON.stringify({id, profilo: "studenti", mi_piace: on, annuncio: a})})).json();
+  const id = b.dataset.id, stato = statoDi(id) === b.dataset.giudizio ? null : b.dataset.giudizio, c = D.classifica;
+  const a = [...c.top, ...c.altri].find(x => x.id === id) || G[id] || {};
+  if (stato) G[id] = {...(G[id]||{}), titolo: a.titolo, url: a.url, prezzo: a.prezzo, stato, profilo: "studenti"}; else delete G[id];
   render();
+  const r = await (await fetch("/api/preferiti", {method: "POST", headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({id, profilo: "studenti", stato, annuncio: a})})).json();
+  if (r.preferiti) G = soloStudenti(r.preferiti);
+  if (r.ricalcolo) poll(); else render();
 });
 
 function emailBadge(id){
@@ -283,7 +303,7 @@ function card(a){
       <div class="tags">${tags}</div>
     </div>
     <div class="score">
-      <div class="badge">${likeBtn(a.id)}<span class="g chip ${gClass(v.giudizio)}">${esc(v.giudizio)}</span><span class="n num">${fmt(v.punteggio)}</span></div>
+      <div class="badge"><span class="giudizio">${giudizioBtns(a.id)}</span><span class="g chip ${gClass(v.giudizio)}">${esc(v.giudizio)}</span><span class="n num">${fmt(v.punteggio)}</span></div>
       <div class="bars">${Object.keys(LABELS).map(k=>`<span>${LABELS[k]}</span><span class="bar"><i style="width:${p[k]}%"></i></span>`).join("")}</div>
       <label class="pick"><input type="checkbox" ${SEL.has(a.id)?"checked":""}> Visita</label>
     </div>

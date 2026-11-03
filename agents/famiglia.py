@@ -14,7 +14,7 @@ from datetime import datetime
 from email.message import EmailMessage
 from email.utils import formataddr, formatdate, make_msgid
 
-from . import fonti, fonti_extra, verifiche, zone
+from . import fonti, fonti_extra, preferiti, verifiche, zone
 from .catalogatore import duplicati, segnali, stato_norm
 from .common import DATA, haversine_km, http_get, load_config, load_json, log, median, save_json
 from .mailer import smtp_connessione
@@ -307,6 +307,9 @@ def run(report=False, solo_valuta=False):
     save_json("famiglia_storico.json", storico)
 
     tenuti.sort(key=lambda a: -a["punteggio"])
+    scartati_utente = preferiti.ids("famiglia", "scartato")  # "Scarta" dalla pagina
+    tenuti = [a for a in tenuti if a["id"] not in scartati_utente]
+    preferiti.aggiorna("famiglia", tenuti)
     n = f.get("top", 30)
     avvisi = [a for a in tenuti if a["fonte"] in FONTI_EMAIL]
     save_json("famiglia.json", {"aggiornato": now, "per_fonte": per_fonte,
@@ -348,7 +351,8 @@ def invia_report(cfg):
     oggi = d["aggiornato"][:10]
     top = d["top"][:cfg["famiglia"].get("top_report", 15)]
     nuovi = sum(1 for a in top if a.get("prima_vista", "")[:10] == oggi)
-    righe_h, righe_t = [], []
+    pref_txt, pref_html, pref_nov = preferiti.sezione_report(preferiti.riepilogo("famiglia", oggi))
+    righe_h, righe_t = [pref_html] if pref_html else [], [pref_txt] if pref_txt else []
     for i, a in enumerate(top, 1):
         c = a["caratteristiche"]
         info = (f"{a.get('zona', '')} · {_eur(a['prezzo'])} · {a['mq']:.0f} mq · {c['camere'] or '?'} camere"
@@ -390,11 +394,13 @@ def invia_report(cfg):
 <div style="font-size:13px;color:#5c5b56">{html.escape(info)} · {html.escape(a['fonte'])}</div></td>
 <td style="padding:8px;text-align:right;color:#8b8a84">{a['punteggio']:.0f}</td></tr>""")
     fonti_txt = ", ".join(f"{k} {v}" for k, v in d["per_fonte"].items())
-    oggetto = f"Casa famiglia Milano — {len(top)} migliori del {data}" + (f" ({nuovi} {'nuovo' if nuovi == 1 else 'nuovi'})" if nuovi else "")
+    oggetto = (f"Casa famiglia Milano — {len(top)} migliori del {data}"
+               + (f" ({nuovi} {'nuovo' if nuovi == 1 else 'nuovi'})" if nuovi else "")
+               + (f" · {pref_nov} novità sui preferiti" if pref_nov else ""))
     testo = (f"Ricerca casa per la famiglia aggiornata il {data}: {d['totale_valutati']} appartamenti valutati.\n"
              f"Fonti: {fonti_txt}\n\n" + "\n".join(righe_t) + f"\nTutti i risultati: {url_dash}/famiglia.html\n")
     corpo = f"""<div style="font-family:system-ui,Segoe UI,Roboto,sans-serif;color:#1d1d1b;max-width:760px">
-<h2 style="margin:0 0 4px">Casa per la famiglia · Milano e cintura</h2>
+<h2 style="margin:0 0 4px">Casa per la famiglia · Milano</h2>
 <p style="color:#5c5b56;margin:0 0 14px;font-size:13px">Aggiornata il {data} · {d['totale_valutati']} appartamenti valutati ·
 Fonti: {html.escape(fonti_txt)}</p><table style="border-collapse:collapse;width:100%">{''.join(righe_h)}</table>
 <p style="font-size:13px"><a href="{url_dash}/famiglia.html">Apri tutti i risultati</a></p></div>"""

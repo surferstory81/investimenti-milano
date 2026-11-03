@@ -39,8 +39,11 @@ Solo ricalcolo:    pulsante "Ricalcola", oppure `python3 run.py --solo-valuta`
   come riserva entro 2 km. La famiglia, con `famiglia.zone` (nome zona → elenco di NIL), tiene solo gli
   annunci dentro quelle zone; senza, vale `raggio_km`. Confini: `agents/dati/nil_milano.geojson`
   (Comune di Milano, NIL vigenti PGT 2030, CC BY 4.0); i nomi validi sono in `agents.zone.nomi()`.
-- **Preferiti**: cuore sulle schede di entrambe le pagine (`data/preferiti.json`); studenti: sezione
-  "I tuoi preferiti" in cima, anche per annunci spariti; famiglia: filtro "Solo preferiti".
+- **Preferiti e scartati**: su ogni scheda ♥ (mi piace) e ✕ (scarta), in `data/preferiti.json`. Gli scartati
+  escono da classifica e report (si ripristinano da "Scartati da te"; la classifica si ricalcola da sola).
+  A ogni valutazione i preferiti registrano prezzo, posizione e ultima vista: il report del mattino apre con
+  "I tuoi preferiti" (cali o aumenti di prezzo, variazione da quando l'hai segnato, annunci non più trovati)
+  e l'oggetto segnala "N novità sui preferiti". Studenti: sezione in cima alla pagina; famiglia: filtro.
 
 ## Test
 `python3 -m unittest discover -s tests -t . -v` (solo libreria standard, senza rete: le email di esempio sono in `tests/dati/`).

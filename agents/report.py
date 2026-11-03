@@ -5,6 +5,7 @@ from datetime import datetime
 from email.message import EmailMessage
 from email.utils import formataddr, formatdate, make_msgid
 
+from . import preferiti
 from .common import DATA, load_config, load_json, log
 from .mailer import smtp_connessione
 
@@ -19,14 +20,17 @@ def _pct(x):
     return f"{x:.1f}%".replace(".", ",")
 
 
-def componi(c, cfg):
+def componi(c, cfg, pref=None):
     top = c["top"]
+    pref = preferiti.riepilogo("studenti", c["aggiornato"][:10]) if pref is None else pref
+    pref_txt, pref_html, pref_nov = preferiti.sezione_report(pref)
     porta = cfg["server"]["porta"]
     data = datetime.fromisoformat(c["aggiornato"]).strftime("%d/%m/%Y %H:%M")
     fonti = ", ".join(f"{k} {v}" if v else f"{k} n.d." for k, v in c.get("per_fonte", {}).items())
     nuovi = sum(1 for a in top if a.get("nuovo_in_top"))
     oggetto = (f"Mono e bilocali universitari Milano — classifica del {data[:10]}"
-               + (f" ({nuovi} {'nuovo' if nuovi == 1 else 'nuovi'})" if nuovi else ""))
+               + (f" ({nuovi} {'nuovo' if nuovi == 1 else 'nuovi'})" if nuovi else "")
+               + (f" · {pref_nov} novità sui preferiti" if pref_nov else ""))
 
     righe_txt, righe_html = [], []
     for a in top:
@@ -58,15 +62,15 @@ def componi(c, cfg):
  <div style="font-size:11px;color:#5c5b56">{e(v['giudizio'])}</div></td></tr>""")
 
     testo = (f"Classifica aggiornata il {data}: {c['totale_valutati']} immobili valutati "
-             f"vicino alle università di Milano.\nFonti: {fonti}\n\n"
+             f"a Milano.\nFonti: {fonti}\n\n" + pref_txt
              + "\n".join(righe_txt) +
              f"\nDettagli e richiesta appuntamenti: {cfg['server'].get('url_pubblico', f'http://localhost:{porta}')}\n"
              "Rendimenti e costi sono stime indicative.\n")
     corpo_html = f"""<div style="font-family:system-ui,Segoe UI,Roboto,sans-serif;color:#1d1d1b;max-width:760px">
 <h2 style="margin:0 0 4px">Mono e bilocali universitari · Milano</h2>
 <p style="color:#5c5b56;margin:0 0 14px;font-size:13px">Classifica aggiornata il {data} · {c['totale_valutati']} immobili valutati
-vicino agli atenei · Fonti: {html.escape(fonti)}</p>
-<table style="border-collapse:collapse;width:100%">{''.join(righe_html)}</table>
+a Milano · Fonti: {html.escape(fonti)}</p>
+<table style="border-collapse:collapse;width:100%">{pref_html}{''.join(righe_html)}</table>
 <p style="color:#5c5b56;font-size:12px;margin-top:16px">Punteggio 0–100 da investitore (valore, rendimento netto, posizione, stato,
 costi accessori, dimensione). Rendimenti e costi sono stime indicative. Dettagli e richiesta appuntamenti dalla dashboard:
 <a href="{cfg['server'].get('url_pubblico', f'http://localhost:{porta}')}">{cfg['server'].get('url_pubblico', f'http://localhost:{porta}')}</a></p></div>"""
