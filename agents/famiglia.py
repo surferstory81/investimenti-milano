@@ -15,6 +15,7 @@ from email.message import EmailMessage
 from email.utils import formataddr, formatdate, make_msgid
 
 from . import fonti, fonti_extra, preferiti, verifiche, zone
+from .camere import camere as conta_camere
 from .catalogatore import duplicati, segnali, stato_norm
 from .common import DATA, haversine_km, http_get, load_config, load_json, log, median, save_json
 from .mailer import smtp_connessione
@@ -137,14 +138,14 @@ def tecnocasa(f):
 
 
 # ------------------------------------------------------------------ analisi
-def caratteristiche(a):
+def caratteristiche(a, camere_min=3):
     testo = f"{a.get('titolo') or ''}\n{a.get('descrizione') or ''}".lower()
     # gli avvisi email non hanno descrizione (Idealista solo un estratto troncato):
     # quello che vi si trova conta, ma l'assenza di salone/cucina non è un'informazione
     # (salvo che l'utente abbia importato la pagina dell'annuncio: agents/verifiche.py)
     car = {"testo": len(a.get("descrizione") or "") >= 80
            and (a.get("fonte") not in FONTI_EMAIL or bool(a.get("verificato")))}
-    camere = _n(a.get("camere")) or _da_testo(_N + r"[ \t]+(?:ampie\s+|grandi\s+)?camer[ae]", testo)
+    camere = _n(a.get("camere")) or conta_camere(testo, _n(a.get("locali")), camere_min)
     car["camere_stimate"] = camere is None
     if camere is None and _n(a.get("locali")):
         camere = max(_n(a["locali"]) - 1, 1)  # sugli annunci Tecnocasa: 4 locali ≈ salone + 3 camere
@@ -276,7 +277,7 @@ def run(report=False, solo_valuta=False):
                 or any(x["tipo"] == "esclusione" for x in a["segnali"])):
             scartati += 1
             continue
-        a["caratteristiche"] = caratteristiche(a)
+        a["caratteristiche"] = caratteristiche(a, f["camere_min"])
         c = a["caratteristiche"]
         if (c["bagni"] is not None and c["bagni"] < f["bagni_min"]) or \
                 (not c["camere_stimate"] and (c["camere"] or 0) < f["camere_min"] - 1):
