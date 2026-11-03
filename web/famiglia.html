@@ -92,7 +92,7 @@ header{display:flex;flex-wrap:wrap;gap:16px;justify-content:space-between;align-
   </header>
   <pre class="log" id="log" hidden></pre>
   <p class="muted small" style="margin-top:0">Priorità: prima la posizione (Centro › Semicentro › Periferia Milano › Cintura),
-    poi i requisiti — 3+ camere, 2 bagni, salone, cucina abitabile (in giallo se mancano o non risultano dall'annuncio) —,
+    poi i requisiti — 3+ camere, 2 bagni, salone, cucina abitabile, piano intermedio o alto (dal 2°) (in giallo se mancano o non risultano dall'annuncio) —,
     i plus per i bambini in blu (piscina, area giochi/campi, spazi comuni attrezzati) e gli altri plus in verde
     (terrazzo, balcone, box, aria condizionata, domotica, ristrutturato). Contano anche prezzo al mq e metratura.</p>
   <div class="filters">
@@ -100,6 +100,9 @@ header{display:flex;flex-wrap:wrap;gap:16px;justify-content:space-between;align-
     <label>Comune <select id="fComune"><option value="">Tutti</option></select></label>
     <label id="lQuartiere" hidden>Quartiere <select id="fQuartiere"><option value="">Tutti</option></select></label>
     <label>Prezzo max <input type="number" id="fPrezzo" step="50000" placeholder="€"></label>
+    <label>Piano <select id="fPiano" title="Gli annunci senza piano indicato restano visibili">
+      <option value="">Qualsiasi</option><option value="1">dal 1°</option><option value="2">dal 2° (intermedi e alti)</option>
+      <option value="4">alti (dal 4° o ultimo)</option></select></label>
     <label><input type="checkbox" id="fReq"> Solo con tutti i requisiti</label>
     <label><input type="checkbox" id="fNuovi"> Solo nuovi oggi</label>
     <label><input type="checkbox" id="fPref"> Solo preferiti <span id="nPref" class="muted"></span></label>
@@ -135,6 +138,7 @@ async function load(){
   const comuni = [...new Set([...D.top, ...D.altri].map(a => a.comune))].sort();
   $("#fComune").innerHTML = `<option value="">Tutti</option>` + comuni.map(c => `<option>${esc(c)}</option>`).join("");
   $("#fComune").value = pref("comune") || "";
+  $("#fPiano").value = pref("piano") || "";
   const quartieri = [...new Set([...D.top, ...D.altri, ...(D.avvisi||[])].map(a => a.zona_scelta).filter(Boolean))].sort();
   $("#lQuartiere").hidden = !quartieri.length;
   $("#fQuartiere").innerHTML = `<option value="">Tutti</option>` + quartieri.map(q => `<option>${esc(q)}</option>`).join("");
@@ -147,8 +151,11 @@ function soloFamiglia(pr){ return Object.fromEntries(Object.entries(pr || {}).fi
 function render(){
   const oggi = D.aggiornato.slice(0,10);
   const zn = $("#fZona").value, com = $("#fComune").value, qr = $("#fQuartiere").value, pmax = +$("#fPrezzo").value || Infinity;
+  const pmin = $("#fPiano").value === "" ? null : +$("#fPiano").value;
+  const LIV = {seminterrato: -1, terra: 0, primo: 1, intermedio: 2, alto: 4};
+  const pianoOk = a => pmin === null || !a.piano_classe || LIV[a.piano_classe] >= pmin;
   const ok = a => (!zn || a.zona === zn) && (!com || a.comune === com) && (!qr || a.zona_scelta === qr) && a.prezzo <= pmax &&
-    statoDi(a.id) !== "scartato" && (!$("#fPref").checked || statoDi(a.id) === "mi_piace") &&
+    statoDi(a.id) !== "scartato" && pianoOk(a) && (!$("#fPref").checked || statoDi(a.id) === "mi_piace") &&
     (!$("#fNuovi").checked || (a.prima_vista||"").slice(0,10) === oggi);
   const all = [...D.top, ...D.altri].filter(a => ok(a) && (!$("#fReq").checked || !a.mancano.length));
   $("#fCount").textContent = `${all.length} risultati`;
@@ -175,6 +182,8 @@ function card(a, i, oggi){
     ...(a.plus_bimbi||[]).map(p => `<span class="chip kid">${esc(p)}</span>`),
     ...a.plus.map(p => `<span class="chip good">${esc(p)}</span>`),
     ...a.mancano.map(m => `<span class="chip warn">manca: ${esc(m)}</span>`),
+    ...(["terra", "seminterrato", "primo"].includes(a.piano_classe) ? [`<span class="chip warn">piano basso</span>`] :
+        a.piano_classe === "alto" ? [`<span class="chip good">piano alto</span>`] : []),
     ...(a.verificato ? [`<span class="chip good" title="Dati dalla pagina dell'annuncio, importata il ${esc(dt(a.verificato))}">verificato</span>`] : []),
     ...(a.da_verificare||[]).map(m => `<span class="chip">da verificare: ${esc(m)}</span>`),
     ...(calo ? [`<span class="chip good">Prezzo −${calo}%</span>`] : []),
@@ -192,7 +201,7 @@ function card(a, i, oggi){
         <span><b>${eur(a.prezzo)}</b></span><span><b>${Math.round(a.mq)}</b> mq</span>
         <span>${eur(a.prezzo_mq)}/mq${a.sconto_zona_pct != null ? ` (${a.sconto_zona_pct > 0 ? "−" : "+"}${Math.abs(a.sconto_zona_pct)}% vs comune)` : ""}</span>
         <span><b>${c.camere ?? "?"}</b> camere${c.camere_stimate ? " (stima)" : ""}</span><span><b>${c.bagni ?? "?"}</b> bagni</span>
-        ${a.piano ? `<span>Piano ${esc(a.piano)}</span>` : ""}${a.classe_energetica ? `<span>Classe ${esc(a.classe_energetica)}</span>` : ""}
+        <span>${a.piano_info ? esc(a.piano_info) : a.piano ? "Piano " + esc(a.piano) : "piano ?"}</span>${a.classe_energetica ? `<span>Classe ${esc(a.classe_energetica)}</span>` : ""}
       </div>
       <div class="tags">${tags}</div>
       <div class="links"><a href="${esc(a.url)}" target="_blank" rel="noopener">Apri su ${esc(a.fonte)}</a>${altre ? `<span class="muted">anche su</span>${altre}` : ""}
@@ -203,8 +212,8 @@ function card(a, i, oggi){
   </div>`;
 }
 
-["#fZona","#fComune","#fQuartiere","#fPrezzo","#fReq","#fNuovi","#fPref"].forEach(s => $(s).addEventListener("input", () => {
-  pref("comune", $("#fComune").value); pref("quartiere", $("#fQuartiere").value); render(); }));
+["#fZona","#fComune","#fQuartiere","#fPiano","#fPrezzo","#fReq","#fNuovi","#fPref"].forEach(s => $(s).addEventListener("input", () => {
+  pref("comune", $("#fComune").value); pref("quartiere", $("#fQuartiere").value); pref("piano", $("#fPiano").value); render(); }));
 
 async function run(solo){
   await fetch("/api/famiglia/ricerca",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({solo_valuta:solo})});

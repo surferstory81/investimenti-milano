@@ -190,7 +190,8 @@
       "ristrutturato": 5,
       "prezzo": 7,
       "metratura": 3,
-      "giardino_condominiale": 1
+      "giardino_condominiale": 1,
+      "piano": 6
     },
     "zone": {
       "Arco della Pace, Arena, Pagano": [

@@ -16,6 +16,7 @@ from email.utils import formataddr, formatdate, make_msgid
 
 from . import fonti, fonti_extra, preferiti, verifiche, zone
 from .camere import camere as conta_camere
+from .piano import VALORE as VALORE_PIANO, etichetta as etichetta_piano, piano as leggi_piano
 from .catalogatore import duplicati, segnali, stato_norm
 from .common import DATA, haversine_km, http_get, load_config, load_json, log, median, save_json
 from .mailer import smtp_connessione
@@ -165,6 +166,7 @@ def caratteristiche(a, camere_min=3):
     st = stato_norm(a.get("stato"), testo)
     car["ristrutturato"] |= st in ("ottimo", "nuovo") or bool(a.get("anno_ristrutturazione"))
     car["stato"] = st
+    car["piano"] = leggi_piano(a)
     return car
 
 
@@ -176,9 +178,12 @@ def zona(a):
             return nome, punti
 
 
+PESO_PIANO = 6  # se config.famiglia.pesi non ha "piano"
+
+
 def valuta(a, med_comune, f):
     c = a["caratteristiche"]
-    p = f["pesi"]
+    p = {"piano": PESO_PIANO, **f["pesi"]}
     s = {}
     a["zona"], punti = zona(a)
     s["posizione"] = p["posizione"] * punti
@@ -203,6 +208,11 @@ def valuta(a, med_comune, f):
         a["sconto_zona_pct"] = round(100 * sconto, 1)
     else:
         s["prezzo"] = p["prezzo"] * 0.5
+    # piano: preferiti intermedi (2°-3°) e alti (dal 4° o ultimo); ignoto a metà
+    pi = c.get("piano") or {"classe": None}
+    s["piano"] = p["piano"] * VALORE_PIANO[pi["classe"]]
+    a["piano_info"] = etichetta_piano(pi) if pi["classe"] else None
+    a["piano_classe"] = pi["classe"]
     # metratura: pieno da mq_ideale in su
     mq = a.get("mq") or 0
     s["metratura"] = p["metratura"] * max(0, min(1, (mq - f["mq_min"]) / max(1, f["mq_ideale"] - f["mq_min"])))
@@ -356,8 +366,8 @@ def invia_report(cfg):
     righe_h, righe_t = [pref_html] if pref_html else [], [pref_txt] if pref_txt else []
     for i, a in enumerate(top, 1):
         c = a["caratteristiche"]
-        info = (f"{a.get('zona', '')} · {_eur(a['prezzo'])} · {a['mq']:.0f} mq · {c['camere'] or '?'} camere"
-                f"{' (stima)' if c['camere_stimate'] else ''} · {c['bagni'] or '?'} bagni · {a['comune']}")
+        info = (f"{a.get('zona_scelta') or a.get('zona', '')} · {_eur(a['prezzo'])} · {a['mq']:.0f} mq · {c['camere'] or '?'} camere"
+                f"{' (stima)' if c['camere_stimate'] else ''} · {c['bagni'] or '?'} bagni · {a.get('piano_info') or 'piano ?'} · {a['comune']}")
         nuovo = " 🆕" if a.get("prima_vista", "")[:10] == oggi else ""
         righe_t.append(f"{i}. [{a['punteggio']:.0f}] {a['titolo']}{nuovo}\n   {info}\n"
                        f"   Bimbi: {', '.join(a.get('plus_bimbi', [])) or '—'} · Plus: {', '.join(a['plus']) or '—'}\n"
