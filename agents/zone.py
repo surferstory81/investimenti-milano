@@ -4,12 +4,15 @@ dall'utente.
 - nil_di(lat, lon): nome del NIL che contiene il punto, None se fuori dal Comune.
 - zona_scelta(lat, lon, zone): la zona dell'utente (config → famiglia.zone) che
   contiene il punto. Ogni zona è l'elenco dei NIL che la compongono, perché i
-  portali usano nomi propri ("Solari, Washington") che non coincidono con i NIL.
+  portali usano nomi propri ("Solari, Washington") che non coincidono con i NIL;
+  fuori Milano (niente NIL) una zona è un cerchio: {"centro": [lat, lon], "raggio_km": 0.9}.
 
 Confini: agents/dati/nil_milano.geojson (Comune di Milano, PGT 2030, CC BY 4.0)."""
 import json
 from functools import lru_cache
 from pathlib import Path
+
+from .common import haversine_km
 
 FILE = Path(__file__).resolve().parent / "dati" / "nil_milano.geojson"
 
@@ -53,13 +56,33 @@ def nil_di(lat, lon):
     return None
 
 
+def _cerchio(d):
+    return isinstance(d, dict) and "centro" in d
+
+
 def zona_scelta(lat, lon, zone):
-    """zone: {"Nome zona": ["NIL", ...]} → nome della zona o None."""
+    """zone: {"Nome zona": ["NIL", ...] | {"centro": [lat, lon], "raggio_km": r}} → nome o None."""
+    if lat is None or lon is None:
+        return None
     n = nil_di(lat, lon)
-    return next((z for z, elenco in (zone or {}).items() if n in elenco), None) if n else None
+    for z, d in (zone or {}).items():
+        if _cerchio(d):
+            if haversine_km(lat, lon, *d["centro"]) <= d.get("raggio_km", 1.0):
+                return z
+        elif n and n in d:
+            return z
+    return None
 
 
 def verifica_config(zone):
-    """NIL scritti male nel config (non esistono): meglio saperlo subito."""
-    validi = set(nomi())
-    return sorted({n for elenco in (zone or {}).values() for n in elenco if n not in validi})
+    """Voci sbagliate nel config (NIL inesistenti, cerchi malformati)."""
+    validi, errori = set(nomi()), set()
+    for z, d in (zone or {}).items():
+        if _cerchio(d):
+            c = d["centro"]
+            if not (isinstance(c, list) and len(c) == 2 and all(isinstance(x, (int, float)) for x in c)
+                    and isinstance(d.get("raggio_km", 1.0), (int, float)) and d.get("raggio_km", 1.0) > 0):
+                errori.add(f"{z}: cerchio non valido")
+        else:
+            errori.update(n for n in d if n not in validi)
+    return sorted(errori)

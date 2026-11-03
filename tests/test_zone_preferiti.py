@@ -56,9 +56,20 @@ class Nil(unittest.TestCase):
 
     def test_config_di_esempio_valido(self):
         self.assertEqual(zone.verifica_config(ZONE), [])
-        tutti = [n for v in ZONE.values() for n in v]
+        tutti = [n for v in ZONE.values() if isinstance(v, list) for n in v]
         self.assertEqual(len(tutti), len(set(tutti)), "un NIL in due zone")
-        self.assertEqual(len(ZONE), 14)
+        self.assertEqual(len(ZONE), 15)
+
+    def test_san_felice_cerchio(self):
+        self.assertEqual(zone.zona_scelta(45.4740, 9.3080, ZONE), "San Felice (Segrate)")   # dentro San Felice
+        self.assertIsNone(zone.zona_scelta(45.4900, 9.2950, ZONE))                          # Segrate centro
+        self.assertIsNone(zone.zona_scelta(None, 9.3, ZONE))
+        self.assertEqual(ZONE["San Felice (Segrate)"], {"centro": [45.4732, 9.3075], "raggio_km": 0.9})
+
+    def test_cerchi_malformati(self):
+        self.assertEqual(zone.verifica_config({"a": {"centro": [45.4]}, "b": {"centro": [45.4, 9.3], "raggio_km": 0},
+                                               "c": {"centro": [45.4, 9.3]}}),
+                         ["a: cerchio non valido", "b: cerchio non valido"])
 
     def test_errori_di_battitura(self):
         self.assertEqual(zone.verifica_config({"x": ["DUOMO", "BRERRA"]}), ["BRERRA"])

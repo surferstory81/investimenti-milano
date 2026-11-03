@@ -244,7 +244,14 @@
       "Udine": [
         "PADOVA - TURRO - CRESCENZAGO",
         "CIMIANO - ROTTOLE - Q.RE FELTRE"
-      ]
+      ],
+      "San Felice (Segrate)": {
+        "centro": [
+          45.4732,
+          9.3075
+        ],
+        "raggio_km": 0.9
+      }
     }
   },
   "avvisi": {
