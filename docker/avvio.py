@@ -2,21 +2,19 @@
 all'orario di config.json → report.orario (sostituisce il timer systemd)."""
 import subprocess
 import sys
-import time
-from datetime import datetime, timedelta
+from datetime import datetime
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from agents.common import load_config, log  # noqa: E402
+from agents.orario import attendi, prossima  # noqa: E402
 
 server = subprocess.Popen([sys.executable, "server.py"])
+ultimo_giorno = None  # un solo giro per data, anche nel giorno del cambio d'ora
 while True:
     hh, mm = map(int, load_config()["report"].get("orario", "08:00").split(":"))
-    ora = datetime.now()
-    prossima = ora.replace(hour=hh, minute=mm, second=0, microsecond=0)
-    if prossima <= ora:
-        prossima += timedelta(days=1)
-    time.sleep((prossima - ora).total_seconds())
+    attendi(prossima(datetime.now(), hh, mm, ultimo_giorno))
+    ultimo_giorno = datetime.now().date()
     log("Orchestratore", "ricerca giornaliera programmata")
     subprocess.run([sys.executable, "run.py", "--report"])
     if load_config().get("famiglia"):

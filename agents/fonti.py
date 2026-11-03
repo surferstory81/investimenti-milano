@@ -540,13 +540,27 @@ def immobiliare_email(cfg, r=None, profilo="studenti"):
 
 
 # -------------------------------------------- Casa.it (avvisi email via IMAP)
-def _casa_email_parse(h):
-    """Avviso Casa.it (HTML): "per la tua ricerca <nome>", poi per ogni annuncio
+def _casa_ricerca(testo, oggetto=""):
+    """Nome della ricerca salvata in un avviso Casa.it. Il più affidabile è il
+    riquadro in fondo ("La tua ricerca <nome>"); poi "per la tua ricerca <nome>" ma
+    solo sulla stessa riga (nel "Riepilogo" la frase va a capo e la riga dopo è il
+    titolo del primo annuncio); infine l'oggetto ("Riepilogo e suggerimenti per la
+    tua ricerca <nome>")."""
+    for rx, t in ((r"^La tua ricerca[ \t]+(?!è\b)([^\n]+)$", testo), (r"per la tua ricerca[ \t]+([^\n]+)", testo),
+                  (r"per la tua ricerca\s+(.+?)\s*$", re.sub(r"\s+", " ", oggetto or ""))):
+        m = re.search(rx, t, re.M | re.I)
+        if m and m.group(1).strip():
+            return m.group(1).strip()
+    return ""
+
+
+def _casa_email_parse(h, oggetto=""):
+    """Avviso Casa.it (HTML): nome della ricerca (_casa_ricerca), poi per ogni annuncio
     titolo, "€ <prezzo>", "<mq> m²", "<n> locali", "<n> bagni", "Vedi N foto"."""
     righe = [x.strip() for x in htmlmod.unescape(re.sub(r"<[^>]+>", "\n", re.sub(
         r"<style.*?</style>", "", h, flags=re.S))).splitlines() if x.strip()]
     testo = "\n".join(righe)
-    nome = re.search(r"per la tua ricerca\s+([^\n]+)", testo)
+    nome = _casa_ricerca(testo, oggetto)
     link = list(dict.fromkeys(re.findall(r"https://www\.casa\.it/immobili/(\d+)/", h)))
     out = []
     for i, b in enumerate(re.finditer(
@@ -560,8 +574,8 @@ def _casa_email_parse(h):
             indirizzo=re.sub(r"^.*? in vendita (?:in )?", "", titolo).replace(" (MI)", ""),
             prezzo=_num_it(b["prezzo"]), mq=_num(mq.group(1)) if mq else None,
             locali=loc.group(1) if loc else None, bagni=bag.group(1) if bag else None,
-            box=bool(re.search(r"posti? auto|box", corpo)),
-            ricerca=(nome.group(1).strip() if nome else "")))
+            box=bool(re.search(r"post[oi] auto|\bbox\b", corpo, re.I)),
+            ricerca=nome))
     return out
 
 
@@ -574,12 +588,15 @@ def casa_email(cfg, r=None, profilo="studenti"):
     dal = (datetime.now() - timedelta(days=giorni)).strftime("%d-%b-%Y")
     _, d = M.search(None, "FROM", "noreply@casa.it", "SINCE", dal)
     trovati = {}
+    from email.header import decode_header, make_header
     for num in d[0].split():
         _, m = M.fetch(num, "(BODY.PEEK[])")
-        for p in email.message_from_bytes(m[0][1]).walk():
+        msg = email.message_from_bytes(m[0][1])
+        oggetto = str(make_header(decode_header(msg["Subject"] or "")))
+        for p in msg.walk():
             if p.get_content_type() == "text/html":
                 for x in _casa_email_parse(p.get_payload(decode=True).decode(
-                        p.get_content_charset() or "utf-8", "replace")):
+                        p.get_content_charset() or "utf-8", "replace"), oggetto):
                     if x["id"]:
                         trovati[x["id"]] = x
     M.logout()
