@@ -20,7 +20,7 @@ from .common import DATA, haversine_km, http_get, load_config, load_json, log, m
 from .mailer import smtp_connessione
 
 AGENT = "Famiglia"
-FONTI_EMAIL = ("Immobiliare.it", "Casa.it")  # annunci dagli avvisi: senza descrizione
+FONTI_EMAIL = ("Immobiliare.it", "Casa.it", "Idealista")  # annunci dagli avvisi: senza descrizione
 CENTRO = (45.4642, 9.1900)  # Duomo
 SUBITO = "https://www.subito.it/annunci-lombardia/vendita/appartamenti/{prov}/"
 TECNOCASA = "https://www.tecnocasa.it/annunci/immobili/lombardia/{comune}.html"
@@ -139,7 +139,9 @@ def tecnocasa(f):
 # ------------------------------------------------------------------ analisi
 def caratteristiche(a):
     testo = f"{a.get('titolo') or ''}\n{a.get('descrizione') or ''}".lower()
-    car = {"testo": len(a.get("descrizione") or "") >= 80}  # gli avvisi email non hanno descrizione
+    # gli avvisi email non hanno descrizione (Idealista solo un estratto troncato):
+    # quello che vi si trova conta, ma l'assenza di salone/cucina non è un'informazione
+    car = {"testo": len(a.get("descrizione") or "") >= 80 and a.get("fonte") not in FONTI_EMAIL}
     camere = _n(a.get("camere")) or _da_testo(_N + r"\s+(?:ampie\s+|grandi\s+)?camer[ae]", testo)
     car["camere_stimate"] = camere is None
     if camere is None and _n(a.get("locali")):
@@ -315,6 +317,7 @@ def _raccogli(cfg, f, add):
     add("Casavo", lambda: fonti_extra.casavo(dict(f, locali_max=99)))
     add("Immobiliare.it", lambda: fonti.immobiliare_email(cfg, dict(f, locali_max=99), "famiglia"))
     add("Casa.it (avvisi)", lambda: fonti.casa_email(cfg, dict(f, locali_max=99), "famiglia"))
+    add("Idealista (avvisi)", lambda: fonti.idealista_email(cfg, dict(f, locali_max=99), "famiglia"))
 
 
 # ------------------------------------------------------------------ report

@@ -4,7 +4,8 @@ alle università di Milano.
 Fonti: Subito.it e Tecnocasa (HTTP diretto), Casa.it e Idealista (Firefox
 headless, best-effort: se il portale chiede una verifica anti-bot la fonte viene
 saltata). Immobiliare.it blocca le visite automatiche con CAPTCHA: i suoi annunci
-arrivano dagli avvisi email delle ricerche salvate, letti via IMAP."""
+arrivano dagli avvisi email delle ricerche salvate, letti via IMAP; lo stesso per
+Casa.it e Idealista (fonti casa_email, idealista_email), che integrano il sito."""
 from datetime import datetime
 
 from . import fonti, fonti_extra
@@ -53,6 +54,12 @@ def run():
                     add("Idealista", lambda: fonti.idealista(ff, cfg))
         except Exception as e:
             log(AGENT, f"browser non disponibile: {e}")
+    if "idealista_email" in attive:
+        # dopo il browser: se lo stesso annuncio è già arrivato dal sito (con più
+        # dati) si tiene quello
+        presenti = {a["id"] for a in vendita}
+        add("Idealista (avvisi)", lambda: [a for a in fonti.idealista_email(cfg)
+                                           if a["id"] not in presenti])
 
     log(AGENT, "raccolta canoni d'affitto (Subito.it) per stima rendimento")
     affitto = fonti.subito("affitto", cfg)

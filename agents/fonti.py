@@ -598,3 +598,151 @@ def casa_email(cfg, r=None, profilo="studenti"):
     geocode_all(out)
     log(AGENT, f"Casa.it {profilo} (avvisi email ultimi {giorni} giorni): {len(out)} annunci nel range")
     return out
+
+
+# ------------------------------------------- Idealista (avvisi email via IMAP)
+IDEALISTA_MITTENTE = "nonrispondere@idealista.it"
+_IDEALISTA_LOCALI = {"monolocale": "1", "bilocale": "2", "trilocale": "3",
+                     "quadrilocale": "4", "pentalocale": "5"}
+_IDEALISTA_FINE_DESC = re.compile(r"^(Vedi \d+ foto|Contatta|Vendita all'asta|Escludi le aste|"
+                                  r"Vedi tutti gli annunci|Novità$|Raccomandazione$)")
+
+
+def _righe_html(fr):
+    return [x.strip() for x in htmlmod.unescape(re.sub(r"<[^>]+>", "\n", re.sub(
+        r"<style.*?</style>", "", fr, flags=re.S))).splitlines() if x.strip()]
+
+
+def _idealista_indirizzo(titolo):
+    """'Bilocale in Via X s.n.c, Zona, Milano' → 'Via X, Zona, Milano'. I titoli
+    lunghi arrivano troncati con '...': l'ultimo pezzo incompleto si scarta (se è
+    l'inizio di 'Milano' si rimette Milano per intero)."""
+    ind = re.sub(r"^.*? in " if " in " in titolo else r"^.*? a ", "", titolo, count=1)
+    if ind.endswith("..."):
+        parti = ind[:-3].split(",")
+        resto = parti[-1].strip()
+        ind = ",".join(parti[:-1])
+        if not resto or "Milano".startswith(resto):
+            ind += ", Milano"
+    ind = re.sub(r"\s+s\.n\.c\.?", "", ind, flags=re.I)
+    return ", ".join(p.strip() for p in ind.split(",") if p.strip())
+
+
+def _idealista_email_parse(h, oggetto=""):
+    """Avviso Idealista (HTML): avviso singolo ("Nuovo bilocale per la tua
+    ricerca: X", "Diminuzione di prezzo ...") o riepilogo giornaliero con più
+    ricerche. Ogni annuncio è un blocco che inizia al primo link /immobile/<id>/:
+    titolo, ["<prezzo vecchio>€", "↓N%"], "<prezzo> €", "<n> €/m²", riga
+    caratteristiche ("Box compreso  2 locali  45 m²  3º piano con ascensore";
+    nel riepilogo "N cam. da letto" indica in realtà i locali), descrizione.
+    La ricerca salvata di ogni blocco è il primo "Vedi tutti gli annunci: <nome>"
+    che lo segue; in mancanza, quella nell'oggetto."""
+    inizi, visti = [], set()
+    for m in re.finditer(r'href="https://www\.idealista\.it/immobile/(\d+)/', h):
+        if m.group(1) not in visti:
+            visti.add(m.group(1))
+            inizi.append((m.group(1), h.rfind("<", 0, m.start())))
+    da_oggetto = re.search(r"per la tua ricerca:\s*(.+?)!?\s*$", re.sub(r"\s+", " ", oggetto))
+    out = []
+    for i, (eid, s) in enumerate(inizi):
+        e = inizi[i + 1][1] if i + 1 < len(inizi) else len(h)
+        righe = _righe_html(h[s:e])
+        seguito = next((r for r in _righe_html(h[s:]) if r.startswith("Vedi tutti gli annunci:")), None)
+        ricerca = (seguito.split(":", 1)[1].strip() if seguito
+                   else da_oggetto.group(1).strip() if da_oggetto else "")
+        k_mq = next((k for k, r in enumerate(righe) if r.endswith("€/m²")), None)
+        if k_mq is None:
+            continue
+        prezzi = []
+        k_tit = None
+        for k in range(k_mq - 1, -1, -1):
+            r = righe[k]
+            if re.fullmatch(r"[\d.]+\s*€", r):
+                prezzi.append(_num_it(re.sub(r"[^\d.]", "", r)))
+            elif r.startswith("↓") or r == "Da":
+                continue
+            else:
+                k_tit = k
+                break
+        if not prezzi or k_tit is None:
+            continue
+        titolo = righe[k_tit]
+        if titolo.endswith("..."):  # il titolo completo è nell'attributo title dei link
+            pieno = next((htmlmod.unescape(t) for t in re.findall(r'title="([^"]+)"', h[s:e])
+                          if htmlmod.unescape(t).startswith(titolo[:-3])), None)
+            titolo = pieno or titolo
+        car = righe[k_mq + 1] if k_mq + 1 < len(righe) else ""
+        g = lambda rx: re.search(rx, car)  # noqa: E731
+        mq, loc, cam, bag = (g(r"(?<![/\d])(\d+)\s*m²"), g(r"(\d+)\s*local[ei]"),
+                             g(r"(\d+)\s*cam\. da letto"), g(r"(\d+)\s*bagn"))
+        piano = g(r"((?:\d+\s*[º°]\s*)?piano[^\d]*?(?:con|senza) ascensore|(?:\d+\s*[º°]\s*)?piano(?: terra| rialzato)?)")
+        tipo = re.match(r"\w+", titolo)
+        locali = (loc.group(1) if loc else
+                  _IDEALISTA_LOCALI.get(tipo.group(0).lower()) if tipo and tipo.group(0).lower() in _IDEALISTA_LOCALI
+                  else cam.group(1) if cam else None)
+        desc = []
+        for r in righe[k_mq + 2:]:
+            if _IDEALISTA_FINE_DESC.match(r):
+                break
+            desc.append(r)
+        out.append(dict(
+            id=eid, titolo=titolo.removesuffix("..."), indirizzo=_idealista_indirizzo(titolo),
+            prezzo=prezzi[0], prezzo_precedente=prezzi[-1] if len(prezzi) > 1 and prezzi[-1] > prezzi[0] else None,
+            mq=_num(mq.group(1)) if mq else None, locali=locali,
+            bagni=bag.group(1) if bag else None,
+            piano=piano.group(1).strip() if piano else None,
+            ascensore="con ascensore" in car, box="Box compreso" in car,
+            asta="Vendita all'asta" in righe, descrizione="\n".join(desc), ricerca=ricerca))
+    return out
+
+
+def _idealista_email_annunci(cfg, giorni):
+    """Annunci dagli avvisi Idealista degli ultimi `giorni`; se un annuncio è in
+    più email vale la più recente (es. diminuzione di prezzo)."""
+    import email
+    from datetime import datetime, timedelta
+    from email.header import decode_header, make_header
+    dal = (datetime.now() - timedelta(days=giorni)).strftime("%d-%b-%Y")
+    M = _imap(cfg)
+    _, d = M.search(None, "FROM", IDEALISTA_MITTENTE, "SINCE", dal)
+    trovati = {}
+    for num in d[0].split():  # in ordine di arrivo: le più recenti sovrascrivono
+        _, m = M.fetch(num, "(BODY.PEEK[])")
+        msg = email.message_from_bytes(m[0][1])
+        oggetto = str(make_header(decode_header(msg["Subject"] or "")))
+        for p in msg.walk():
+            if p.get_content_type() == "text/html":
+                for x in _idealista_email_parse(p.get_payload(decode=True).decode(
+                        p.get_content_charset() or "utf-8", "replace"), oggetto):
+                    trovati[x["id"]] = x
+    M.logout()
+    return list(trovati.values())
+
+
+def idealista_email_filtra(annunci, r, profilo="studenti"):
+    """Filtri del profilo (prezzo, locali, ricerca salvata) → record normalizzati."""
+    out = []
+    for x in annunci:
+        if profilo_ricerca(x["ricerca"]) not in (None, profilo):
+            continue
+        if not x["prezzo"] or not (r["prezzo_min"] <= x["prezzo"] <= r["prezzo_max"]):
+            continue
+        if x["locali"] and not (r["locali_min"] <= int(x["locali"]) <= r["locali_max"]):
+            continue
+        out.append(base_record(
+            id=f"idealista-{x['id']}", fonte="Idealista",
+            url=f"https://www.idealista.it/immobile/{x['id']}/",
+            titolo=x["titolo"], descrizione=x["descrizione"], indirizzo=x["indirizzo"],
+            prezzo=x["prezzo"], prezzo_precedente=x["prezzo_precedente"], mq=x["mq"],
+            locali=x["locali"], bagni=x["bagni"], piano=x["piano"],
+            ascensore=x["ascensore"], asta=x["asta"], box=1 if x["box"] else None))
+    return out
+
+
+def idealista_email(cfg, r=None, profilo="studenti"):
+    r = r or cfg["ricerca"]
+    giorni = r.get("immobiliare_email_giorni", 30)
+    out = idealista_email_filtra(_idealista_email_annunci(cfg, giorni), r, profilo)
+    geocode_all(out)
+    log(AGENT, f"Idealista {profilo} (avvisi email ultimi {giorni} giorni): {len(out)} annunci nel range")
+    return out

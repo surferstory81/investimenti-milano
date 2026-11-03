@@ -19,6 +19,14 @@ Solo ricalcolo:    pulsante "Ricalcola", oppure `python3 run.py --solo-valuta`
   dagli **avvisi email**: su immobiliare.it salva una ricerca (Milano, 1-2 locali, fascia di prezzo) e
   attiva le notifiche "istantanee". L'agente legge via IMAP le email di `immobiliare.it` (avvisi istantanei o giornalieri) degli
   ultimi `ricerca.immobiliare_email_giorni` giorni (fonte `immobiliare_email`), dalla casella in `config.json` → `avvisi` (utente + password per le app di quell'account).
+- **Casa.it, Idealista (avvisi email)**: stesso meccanismo (fonti `casa_email`, `idealista_email`). Per Idealista
+  si leggono gli avvisi istantanei ("Nuovo …", "Diminuzione di prezzo …") e il riepilogo giornaliero da
+  `nonrispondere@idealista.it`; se un annuncio arriva anche dal sito vale quello del sito. Le aste vengono
+  marcate (`asta`) e scartate dal catalogatore. Profilo dalla ricerca salvata: nome con famiglia/family →
+  famiglia, studenti/investimento → studenti, altrimenti entrambi.
+
+## Test
+`python3 -m unittest discover -s tests -t . -v` (solo libreria standard, senza rete: le email di esempio sono in `tests/dati/`).
 
 ## Invio email reale (Gmail)
 1. Attiva la verifica in 2 passaggi sull'account Google.
