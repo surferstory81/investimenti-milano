@@ -14,7 +14,7 @@ from datetime import datetime
 from email.message import EmailMessage
 from email.utils import formataddr, formatdate, make_msgid
 
-from . import fonti, fonti_extra, verifiche
+from . import fonti, fonti_extra, verifiche, zone
 from .catalogatore import duplicati, segnali, stato_norm
 from .common import DATA, haversine_km, http_get, load_config, load_json, log, median, save_json
 from .mailer import smtp_connessione
@@ -252,6 +252,9 @@ def run(report=False, solo_valuta=False):
         save_json("famiglia_grezzi.json", {"per_fonte": per_fonte, "annunci": raccolti})
 
     importati = load_json(verifiche.FILE, {})
+    zone_scelte = f.get("zone")  # {"Solari, Washington": [NIL, ...]}: come sui portali
+    if zone.verifica_config(zone_scelte):
+        log(AGENT, f"famiglia.zone: NIL inesistenti {zone.verifica_config(zone_scelte)}")
     tenuti, scartati = [], 0
     for a in raccolti:
         verifiche.applica(a, importati)
@@ -259,11 +262,16 @@ def run(report=False, solo_valuta=False):
             scartati += 1
             continue
         a["km_centro"] = round(haversine_km(a["lat"], a["lon"], *CENTRO), 1)
+        if zone_scelte:
+            a["zona_scelta"] = zone.zona_scelta(a["lat"], a["lon"], zone_scelte)
+            if not a["zona_scelta"]:
+                scartati += 1
+                continue
         # per una famiglia un immobile già affittato è un problema, non un plus
         a["segnali"] = [dict(x, etichetta="Occupato / già locato", tipo="attenzione")
                         if x["etichetta"].startswith("Già locato") else x
                         for x in segnali(a) if not x["etichetta"].startswith(("Target studenti", "Sotto 28"))]
-        if (a["km_centro"] > f["raggio_km"] or a["mq"] < f["mq_min"]
+        if ((not zone_scelte and a["km_centro"] > f["raggio_km"]) or a["mq"] < f["mq_min"]
                 or not (f["prezzo_min"] <= a["prezzo"] <= f["prezzo_max"])
                 or any(x["tipo"] == "esclusione" for x in a["segnali"])):
             scartati += 1

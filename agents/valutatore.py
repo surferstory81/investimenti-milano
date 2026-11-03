@@ -1,8 +1,8 @@
 """AGENTE VALUTATORE: valuta ogni annuncio come farebbe un investitore che
 compra per affittare a studenti. Sei criteri (0-100), pesati da config.json:
 
-  valore      €/mq rispetto alla mediana della stessa zona universitaria
-  rendimento  rendimento netto stimato (canone reale di zona, spese, tasse)
+  valore      €/mq rispetto alla mediana dello stesso quartiere (NIL) o zona universitaria
+  rendimento  rendimento netto stimato (canone reale di quartiere, spese, tasse)
   posizione   distanza dall'università, numero di atenei vicini, metro
   stato       condizioni dell'immobile + classe energetica
   costi       costi accessori d'acquisto e spese ricorrenti
@@ -27,22 +27,37 @@ def lin(x, x0, x1):
 PRUDENZA = 0.92  # canone richiesto negli annunci ≠ canone effettivamente spuntato
 
 
-def canone_stimato(a, canoni, c):
-    """40° percentile dei canoni di affitti con taglio simile (±8 mq) in zona;
-    se il campione è scarso usa il €/mq mediano di zona, poi il default."""
-    serie = canoni.get(a["zona_universitaria"], [])
+def canone_stimato(a, canoni, c, canoni_nil=None):
+    """40° percentile dei canoni di affitti con taglio simile (±8 mq) nello stesso
+    quartiere (NIL); se il campione è scarso il €/mq di quartiere, poi gli stessi
+    due calcoli sulla zona universitaria (solo entro 2 km dall'ateneo: più lontano
+    i canoni non sono rappresentativi), infine il default."""
     mq = a["mq"]
-    simili = [p for p, m in serie if abs(m - mq) <= 8]
-    if len(simili) >= 6:
-        canone = percentile(simili, 0.4) * PRUDENZA
-        metodo = f"40° percentile di {len(simili)} affitti simili in zona"
-    elif len(serie) >= 8:
-        canone = percentile([p / m for p, m in serie], 0.4) * mq * PRUDENZA
-        metodo = f"€/mq mediano di {len(serie)} affitti in zona"
+    candidati = [((canoni_nil or {}).get(a.get("nil")) or [], "nel quartiere")]
+    if a.get("distanza_uni_km", 0) <= 2.0:
+        candidati.append((canoni.get(a["zona_universitaria"], []), "in zona universitaria"))
+    for serie, dove in candidati:
+        simili = [p for p, m in serie if abs(m - mq) <= 8]
+        if len(simili) >= 6:
+            canone = percentile(simili, 0.4) * PRUDENZA
+            metodo = f"40° percentile di {len(simili)} affitti simili {dove}"
+            break
+        if len(serie) >= 8:
+            canone = percentile([p / m for p, m in serie], 0.4) * mq * PRUDENZA
+            metodo = f"€/mq mediano di {len(serie)} affitti {dove}"
+            break
     else:
         canone = c["affitto_eur_mq_default"] * mq * PRUDENZA
         metodo = "stima di default (pochi affitti in zona)"
     return round(canone / 10) * 10, round(canone / mq, 1), metodo
+
+
+def mediana_zona(a, ctx):
+    """€/mq di riferimento: quartiere (NIL) se ci sono almeno 5 annunci, poi zona
+    universitaria (entro 2 km), poi tutta la ricerca."""
+    return (ctx.get("mediana_nil", {}).get(a.get("nil"))
+            or (ctx["mediana_eur_mq"].get(a["zona_universitaria"]) if a.get("distanza_uni_km", 0) <= 2.0 else None)
+            or ctx["mediana_globale"])
 
 
 def costi_acquisto(a, c):
@@ -65,7 +80,7 @@ def valuta(a, ctx, cfg):
     p = a["prezzo"]
     acq = costi_acquisto(a, c)
     investimento = p + acq["totale_accessori"]
-    canone, eur_mq_aff, metodo_canone = canone_stimato(a, ctx["canoni"], c)
+    canone, eur_mq_aff, metodo_canone = canone_stimato(a, ctx["canoni"], c, ctx.get("canoni_nil"))
     spese_mese = a.get("spese_condominio_mese")
     spese_stimate = spese_mese is None
     if spese_stimate:
@@ -81,7 +96,7 @@ def valuta(a, ctx, cfg):
     rend_netto = 100 * netto_anno / investimento
 
     # --- punteggi -------------------------------------------------------
-    med_zona = ctx["mediana_eur_mq"].get(a["zona_universitaria"]) or ctx["mediana_globale"]
+    med_zona = mediana_zona(a, ctx)
     sconto = 100 * (1 - a["prezzo_mq"] / med_zona)
     s_valore = clamp(50 + sconto * 1.6)                     # -30% → 0, +30% → 100
 
@@ -177,12 +192,15 @@ def run():
     cfg = load_config()
     cat = load_json("catalogo.json")
     annunci = cat["annunci"]
-    per_zona = {}
+    per_zona, per_nil = {}, {}
     for a in annunci:
         per_zona.setdefault(a["zona_universitaria"], []).append(a["prezzo_mq"])
+        if a.get("nil"):
+            per_nil.setdefault(a["nil"], []).append(a["prezzo_mq"])
     ctx = {
-        "canoni": cat["canoni_eur_mq"],
+        "canoni": cat["canoni_eur_mq"], "canoni_nil": cat.get("canoni_nil", {}),
         "mediana_eur_mq": {z: median(v) for z, v in per_zona.items() if len(v) >= 5},
+        "mediana_nil": {z: median(v) for z, v in per_nil.items() if len(v) >= 5},
         "mediana_globale": median([a["prezzo_mq"] for a in annunci]),
     }
     valutati = sorted((valuta(a, ctx, cfg) for a in annunci),

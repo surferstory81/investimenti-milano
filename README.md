@@ -33,6 +33,15 @@ Solo ricalcolo:    pulsante "Ricalcola", oppure `python3 run.py --solo-valuta`
 - **Doppioni**: tra più versioni dello stesso immobile si tiene quella da un sito (Tecnocasa, poi Casa.it,
   poi le altre); quelle dagli avvisi email (`avviso_email`) solo se non ce n'è un'altra.
 
+- **Zone**: studenti con `ricerca.area: "milano"` (come le ricerche salvate sui portali) tengono tutto il
+  Comune di Milano; la vicinanza agli atenei resta nel punteggio "posizione". Senza `area` vale il vecchio
+  `raggio_universita_km`. Prezzi e canoni di riferimento sono per quartiere (NIL), con la zona universitaria
+  come riserva entro 2 km. La famiglia, con `famiglia.zone` (nome zona → elenco di NIL), tiene solo gli
+  annunci dentro quelle zone; senza, vale `raggio_km`. Confini: `agents/dati/nil_milano.geojson`
+  (Comune di Milano, NIL vigenti PGT 2030, CC BY 4.0); i nomi validi sono in `agents.zone.nomi()`.
+- **Preferiti**: cuore sulle schede di entrambe le pagine (`data/preferiti.json`); studenti: sezione
+  "I tuoi preferiti" in cima, anche per annunci spariti; famiglia: filtro "Solo preferiti".
+
 ## Test
 `python3 -m unittest discover -s tests -t . -v` (solo libreria standard, senza rete: le email di esempio sono in `tests/dati/`).
 

@@ -194,7 +194,7 @@ def run():
                f"tra portali uniti, {len(scartati)} scartati)")
 
     # canoni d'affitto per zona universitaria (€/mq/mese, mediana)
-    canoni = {}
+    canoni, canoni_nil = {}, {}
     for a in g["affitto"]:
         try:
             if not (a["prezzo"] and a["mq"] and a["universita_vicine"]):
@@ -204,11 +204,13 @@ def run():
             u = a["universita_vicine"][0]
             if u["km"] <= 2.0:
                 canoni.setdefault(u["nome"], []).append([a["prezzo"], a["mq"]])
+            if a.get("nil"):
+                canoni_nil.setdefault(a["nil"], []).append([a["prezzo"], a["mq"]])
         except (KeyError, TypeError):
             continue
     save_json("catalogo.json", {"aggiornato": g["aggiornato"], "annunci": catalogo,
                                 "scartati": scartati, "per_fonte": g.get("per_fonte", {}),
-                                "canoni_eur_mq": canoni})
+                                "canoni_eur_mq": canoni, "canoni_nil": canoni_nil})
     return len(catalogo)
 
 

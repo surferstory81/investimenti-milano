@@ -5,7 +5,7 @@ import threading
 import traceback
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 
-from agents import famiglia, mailer, verifiche
+from agents import famiglia, mailer, preferiti, verifiche
 from agents.common import DATA, ROOT, load_config, load_json, log, save_json
 from run import pipeline
 
@@ -54,6 +54,8 @@ class Handler(SimpleHTTPRequestHandler):
             })
         if self.path == "/api/famiglia":
             return self._json(load_json("famiglia.json"))
+        if self.path == "/api/preferiti":
+            return self._json(preferiti.tutti())
         if self.path == "/api/stato":
             log_path = DATA / "agenti.log"
             righe = log_path.read_text().splitlines()[-14:] if log_path.exists() else []
@@ -89,6 +91,9 @@ class Handler(SimpleHTTPRequestHandler):
                                      args=(False, lambda: famiglia.run(solo_valuta=True))).start()
                 return self._json({"ok": True, "id": v["id"], "camere": v["camere"], "bagni": v["bagni"],
                                    "locali": v["locali"], "caratteri": len(v["testo"]), "ricalcolo": ricalcolo})
+            if self.path == "/api/preferiti":
+                return self._json(preferiti.imposta(b.get("id"), b.get("profilo"), bool(b.get("mi_piace")),
+                                                    b.get("annuncio")))
             if self.path == "/api/selezione":
                 save_json("selezione.json", list(dict.fromkeys(b.get("ids", []))))
                 return self._json({"ok": True})

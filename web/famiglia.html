@@ -60,6 +60,9 @@ header{display:flex;flex-wrap:wrap;gap:16px;justify-content:space-between;align-
 .score b{font-size:26px;letter-spacing:-.02em;display:block}
 .links{font-size:12.5px;margin-top:8px;display:flex;flex-wrap:wrap;gap:4px 12px}
 .empty{padding:60px 20px;text-align:center;color:var(--ink-2)}
+.like{appearance:none;border:0;background:none;cursor:pointer;font-size:22px;line-height:1;padding:2px 0 0;color:var(--ink-3)}
+.like.on{color:var(--bad)}
+.like:focus-visible{outline:2px solid var(--accent);border-radius:6px}
 @media (max-width:760px){
   .card{grid-template-columns:30px 1fr 56px}
   .card .thumb{display:none}
@@ -92,9 +95,11 @@ header{display:flex;flex-wrap:wrap;gap:16px;justify-content:space-between;align-
   <div class="filters">
     <label>Zona <select id="fZona"><option value="">Tutte</option><option>Centro</option><option>Semicentro</option><option>Periferia Milano</option><option>Cintura</option></select></label>
     <label>Comune <select id="fComune"><option value="">Tutti</option></select></label>
+    <label id="lQuartiere" hidden>Quartiere <select id="fQuartiere"><option value="">Tutti</option></select></label>
     <label>Prezzo max <input type="number" id="fPrezzo" step="50000" placeholder="€"></label>
     <label><input type="checkbox" id="fReq"> Solo con tutti i requisiti</label>
     <label><input type="checkbox" id="fNuovi"> Solo nuovi oggi</label>
+    <label><input type="checkbox" id="fPref"> Solo preferiti <span id="nPref" class="muted"></span></label>
     <span class="muted" id="fCount"></span>
   </div>
   <div id="list"></div>
@@ -111,12 +116,13 @@ const $ = s => document.querySelector(s);
 const eur = n => n == null ? "—" : new Intl.NumberFormat("it-IT",{style:"currency",currency:"EUR",maximumFractionDigits:0}).format(n);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const dt = s => s ? new Date(s).toLocaleString("it-IT",{dateStyle:"medium",timeStyle:"short"}) : "—";
-let D = null, wasRunning = false;
+let D = null, wasRunning = false, PREF = new Set();
 
 function pref(k, v){ try{ if(v===undefined) return localStorage.getItem("fam_"+k); localStorage.setItem("fam_"+k, v); }catch(e){} }
 
 async function load(){
-  D = await (await fetch("/api/famiglia")).json();
+  const [d, pr] = await Promise.all([fetch("/api/famiglia").then(r => r.json()), fetch("/api/preferiti").then(r => r.json())]);
+  D = d; PREF = new Set(Object.entries(pr || {}).filter(([, p]) => p.profilo === "famiglia").map(([id]) => id));
   if(!D){ $("#list").innerHTML = `<div class="empty">Nessun dato ancora. Premi <b>Nuova ricerca</b>.</div>`; $("#sub").textContent=""; return; }
   $("#sub").textContent = `Aggiornato ${dt(D.aggiornato)} · ${D.totale_valutati} appartamenti valutati`;
   $("#sources").innerHTML = Object.entries(D.per_fonte||{}).map(([k,v]) =>
@@ -124,20 +130,23 @@ async function load(){
   const comuni = [...new Set([...D.top, ...D.altri].map(a => a.comune))].sort();
   $("#fComune").innerHTML = `<option value="">Tutti</option>` + comuni.map(c => `<option>${esc(c)}</option>`).join("");
   $("#fComune").value = pref("comune") || "";
+  const quartieri = [...new Set([...D.top, ...D.altri, ...(D.avvisi||[])].map(a => a.zona_scelta).filter(Boolean))].sort();
+  $("#lQuartiere").hidden = !quartieri.length;
+  $("#fQuartiere").innerHTML = `<option value="">Tutti</option>` + quartieri.map(q => `<option>${esc(q)}</option>`).join("");
+  $("#fQuartiere").value = quartieri.includes(pref("quartiere")) ? pref("quartiere") : "";
   render();
 }
 
 function render(){
   const oggi = D.aggiornato.slice(0,10);
-  const zn = $("#fZona").value, com = $("#fComune").value, pmax = +$("#fPrezzo").value || Infinity;
-  const all = [...D.top, ...D.altri].filter(a =>
-    (!zn || a.zona === zn) && (!com || a.comune === com) && a.prezzo <= pmax &&
-    (!$("#fReq").checked || !a.mancano.length) &&
-    (!$("#fNuovi").checked || (a.prima_vista||"").slice(0,10) === oggi));
+  const zn = $("#fZona").value, com = $("#fComune").value, qr = $("#fQuartiere").value, pmax = +$("#fPrezzo").value || Infinity;
+  const ok = a => (!zn || a.zona === zn) && (!com || a.comune === com) && (!qr || a.zona_scelta === qr) && a.prezzo <= pmax &&
+    (!$("#fPref").checked || PREF.has(a.id)) && (!$("#fNuovi").checked || (a.prima_vista||"").slice(0,10) === oggi);
+  const all = [...D.top, ...D.altri].filter(a => ok(a) && (!$("#fReq").checked || !a.mancano.length));
   $("#fCount").textContent = `${all.length} risultati`;
+  $("#nPref").textContent = PREF.size ? `(${PREF.size})` : "";
   $("#list").innerHTML = all.length ? all.map((a,i) => card(a, i+1, oggi)).join("") : `<div class="empty">Nessun risultato con questi filtri.</div>`;
-  const av = (D.avvisi||[]).filter(a => (!zn || a.zona === zn) && (!com || a.comune === com) && a.prezzo <= pmax &&
-    (!$("#fNuovi").checked || (a.prima_vista||"").slice(0,10) === oggi));
+  const av = (D.avvisi||[]).filter(ok);
   $("#avvisiTit").hidden = !av.length;
   $("#avvisi").innerHTML = av.map((a,i) => card(a, i+1, oggi)).join("");
 }
@@ -163,7 +172,7 @@ function card(a, i, oggi){
     <a href="${esc(a.url)}" target="_blank" rel="noopener">${a.immagini?.[0] ? `<img class="thumb" loading="lazy" src="${esc(a.immagini[0])}" alt="">` : `<div class="thumb"></div>`}</a>
     <div>
       <div class="title">${esc(a.titolo)}</div>
-      <div class="muted small"><b class="zone">${esc(a.zona || "")}</b> · ${esc(a.indirizzo || a.comune)} · ${a.km_centro} km dal Duomo</div>
+      <div class="muted small"><b class="zone">${esc(a.zona_scelta || a.zona || "")}</b> · ${esc(a.indirizzo || a.comune)} · ${a.km_centro} km dal Duomo</div>
       <div class="facts num">
         <span><b>${eur(a.prezzo)}</b></span><span><b>${Math.round(a.mq)}</b> mq</span>
         <span>${eur(a.prezzo_mq)}/mq${a.sconto_zona_pct != null ? ` (${a.sconto_zona_pct > 0 ? "−" : "+"}${Math.abs(a.sconto_zona_pct)}% vs comune)` : ""}</span>
@@ -174,11 +183,14 @@ function card(a, i, oggi){
       <div class="links"><a href="${esc(a.url)}" target="_blank" rel="noopener">Apri su ${esc(a.fonte)}</a>${altre ? `<span class="muted">anche su</span>${altre}` : ""}
         ${a.inserzionista ? `<span class="muted">${esc(a.inserzionista)}</span>` : ""}</div>
     </div>
-    <div class="score"><b class="num">${Math.round(a.punteggio)}</b><span class="muted small">/100</span></div>
+    <div class="score"><b class="num">${Math.round(a.punteggio)}</b><span class="muted small">/100</span>
+      <div><button class="like ${PREF.has(a.id) ? "on" : ""}" data-like="${esc(a.id)}" aria-pressed="${PREF.has(a.id)}"
+        title="${PREF.has(a.id) ? "Togli dai preferiti" : "Mi piace"}">${PREF.has(a.id) ? "♥" : "♡"}</button></div></div>
   </div>`;
 }
 
-["#fZona","#fComune","#fPrezzo","#fReq","#fNuovi"].forEach(s => $(s).addEventListener("input", () => { pref("comune", $("#fComune").value); render(); }));
+["#fZona","#fComune","#fQuartiere","#fPrezzo","#fReq","#fNuovi","#fPref"].forEach(s => $(s).addEventListener("input", () => {
+  pref("comune", $("#fComune").value); pref("quartiere", $("#fQuartiere").value); render(); }));
 
 async function run(solo){
   await fetch("/api/famiglia/ricerca",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({solo_valuta:solo})});
@@ -199,6 +211,15 @@ async function poll(){
 // segnalibro: legge la pagina che l'utente ha aperto e la passa a importa.html di
 // questa dashboard (in una nuova scheda; i dati viaggiano nel frammento #, mai in rete
 // verso terzi)
+// mi piace: delega sul documento (le schede vengono ridisegnate a ogni filtro)
+document.addEventListener("click", async e => {
+  const b = e.target.closest("[data-like]"); if (!b) return;
+  const id = b.dataset.like, on = !PREF.has(id);
+  const a = [...D.top, ...D.altri, ...(D.avvisi||[])].find(x => x.id === id);
+  on ? PREF.add(id) : PREF.delete(id); render();
+  await fetch("/api/preferiti", {method: "POST", headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({id, profilo: "famiglia", mi_piace: on, annuncio: a})});
+});
 $("#bookmarklet").href = "javascript:" + encodeURIComponent(`(()=>{const m=document.querySelector("main")||document.body;` +
   `const j=[...document.querySelectorAll('script[type="application/ld+json"]')].map(s=>s.textContent).join("\\n");` +
   `const d={u:location.href,t:document.title,x:m.innerText.slice(0,40000),j:j.slice(0,20000)};` +

@@ -20,7 +20,8 @@
       "idealista_email"
     ],
     "immobiliare_email_giorni": 30,
-    "browser_max_pagine": 1
+    "browser_max_pagine": 1,
+    "area": "milano"
   },
   "universita": [
     {
@@ -190,6 +191,60 @@
       "prezzo": 7,
       "metratura": 3,
       "giardino_condominiale": 1
+    },
+    "zone": {
+      "Arco della Pace, Arena, Pagano": [
+        "PARCO SEMPIONE",
+        "PAGANO"
+      ],
+      "Isola, Sarpi, Cenisio": [
+        "ISOLA",
+        "SARPI",
+        "GHISOLFA"
+      ],
+      "Centrale": [
+        "STAZIONE CENTRALE - PONTE SEVESO"
+      ],
+      "Centro storico": [
+        "DUOMO"
+      ],
+      "City Life": [
+        "TRE TORRI"
+      ],
+      "Garibaldi, Moscova, Porta Nuova": [
+        "PORTA GARIBALDI - PORTA NUOVA",
+        "BRERA"
+      ],
+      "Porta Genova, Porta Ticinese": [
+        "PORTA GENOVA",
+        "PORTA TICINESE - CONCHETTA",
+        "PORTA TICINESE - CONCA DEL NAVIGLIO"
+      ],
+      "Porta Romana": [
+        "PTA ROMANA"
+      ],
+      "Porta Venezia, Indipendenza": [
+        "BUENOS AIRES - PORTA VENEZIA - PORTA MONFORTE",
+        "GIARDINI P.TA VENEZIA",
+        "XXII MARZO"
+      ],
+      "Palestro, Quadronno, Guastalla": [
+        "GUASTALLA",
+        "PORTA VIGENTINA - PORTA LODOVICA"
+      ],
+      "Solari, Washington": [
+        "PORTA MAGENTA"
+      ],
+      "Città Studi": [
+        "CITTA' STUDI"
+      ],
+      "Lambrate": [
+        "LAMBRATE - ORTICA"
+      ],
+      "Udine": [
+        "PADOVA - TURRO - CRESCENZAGO",
+        "CIMIANO - ROTTOLE - Q.RE FELTRE"
+      ]
     }
   },
   "avvisi": {

@@ -103,6 +103,9 @@ details>summary{cursor:pointer;font-weight:650;margin:28px 0 10px}
 .note.warn{background:var(--warn-soft);color:var(--warn)} .note.good{background:var(--good-soft);color:var(--good)}
 .modal-foot{display:flex;justify-content:flex-end;gap:10px;margin-top:14px;flex-wrap:wrap}
 .empty{padding:60px 20px;text-align:center;color:var(--ink-2)}
+.like{appearance:none;border:0;background:none;cursor:pointer;font-size:20px;line-height:1;padding:0;color:var(--ink-3)}
+.like.on{color:var(--bad)}
+.like:focus-visible{outline:2px solid var(--accent);border-radius:6px}
 @media (max-width:860px){
   .row{grid-template-columns:34px 1fr;}
   .row .thumb{display:none}
@@ -131,6 +134,11 @@ details>summary{cursor:pointer;font-weight:650;margin:28px 0 10px}
   </header>
   <pre class="log" id="log" hidden></pre>
   <section class="kpis" id="kpis"></section>
+
+  <section id="prefBox" hidden>
+    <h2>I tuoi preferiti</h2>
+    <div id="pref"></div>
+  </section>
 
   <h2>Classifica: i 20 migliori annunci</h2>
   <p class="muted small" style="margin-top:-6px">Punteggio da investitore 0–100: valore (€/mq rispetto alla zona), rendimento netto stimato,
@@ -162,13 +170,14 @@ const eur = n => n == null ? "—" : new Intl.NumberFormat("it-IT",{style:"curre
 const fmt = n => n == null ? "—" : new Intl.NumberFormat("it-IT",{maximumFractionDigits:1}).format(n);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const dt = s => s ? new Date(s).toLocaleString("it-IT",{dateStyle:"medium",timeStyle:"short"}) : "—";
-let D = null, SEL = new Set(), OPEN = new Set(), wasRunning = false;
+let D = null, SEL = new Set(), OPEN = new Set(), wasRunning = false, PREF = {};
 
 const LABELS = {valore:"Valore",rendimento:"Rendimento",posizione:"Posizione",stato:"Stato",costi:"Costi",dimensione:"Dimensione"};
 const gClass = g => ({"Ottimo affare":"good","Interessante":"acc","Nella media":"warn"}[g] || "bad");
 
 async function load(){
-  const r = await fetch("/api/dati"); D = await r.json();
+  const [d, pr] = await Promise.all([fetch("/api/dati").then(r => r.json()), fetch("/api/preferiti").then(r => r.json())]);
+  D = d; PREF = pr || {};
   SEL = new Set(D.selezione || []);
   render();
 }
@@ -176,7 +185,7 @@ async function load(){
 function render(){
   const c = D.classifica;
   if(!c){ $("#top").innerHTML = `<div class="empty">Nessun dato ancora. Premi <b>Nuova ricerca</b> per avviare gli agenti.</div>`; $("#sub").textContent=""; return; }
-  $("#sub").textContent = `Aggiornato ${dt(c.aggiornato)} · ${c.totale_valutati} immobili valutati vicino agli atenei`;
+  $("#sub").textContent = `Aggiornato ${dt(c.aggiornato)} · ${c.totale_valutati} immobili valutati a Milano`;
   $("#sources").innerHTML = Object.entries(c.per_fonte||{}).map(([k,v]) =>
     `<span class="chip ${v? "":"warn"}">${esc(k)}: ${v ? v + " annunci" : "non disponibile"}</span>`).join("");
   const top = c.top;
@@ -190,9 +199,17 @@ function render(){
   ].map(([b,s])=>`<div class="kpi"><b class="num">${b}</b><span>${s}</span></div>`).join("");
 
   $("#top").innerHTML = top.map(card).join("");
+  // preferiti studenti: schede complete se sono ancora tra gli annunci valutati, altrimenti
+  // la riga salvata (annuncio non più sui portali)
+  const valutati = Object.fromEntries([...top, ...c.altri].map(a => [a.id, a]));
+  const pref = Object.entries(PREF).filter(([, p]) => p.profilo === "studenti");
+  $("#prefBox").hidden = !pref.length;
+  $("#pref").innerHTML = pref.map(([id, p]) => valutati[id] ? card(valutati[id]) :
+    `<div class="note warn">${likeBtn(id)} <a href="${esc(p.url)}" target="_blank" rel="noopener">${esc(p.titolo || id)}</a>
+       · ${eur(p.prezzo)} · non più tra gli annunci trovati oggi (venduto o ritirato?)</div>`).join("");
   document.querySelectorAll(".card").forEach(el => {
     el.querySelector(".row").addEventListener("click", e => {
-      if (e.target.closest(".pick") || e.target.closest("a")) return;
+      if (e.target.closest(".pick") || e.target.closest("a") || e.target.closest(".like")) return;
       el.classList.toggle("open");
       OPEN.has(el.dataset.id) ? OPEN.delete(el.dataset.id) : OPEN.add(el.dataset.id);
     });
@@ -205,8 +222,8 @@ function render(){
        <td>${v.canone_eur_mq ? fmt(v.canone_eur_mq*12/v.mediana_eur_mq*100)+"%" : "—"}</td></tr>`).join("");
 
   $("#altriSum").textContent = `Altri annunci valutati (${c.altri.length})`;
-  $("#altri").innerHTML = `<tr><th>#</th><th>Annuncio</th><th>Prezzo</th><th>mq</th><th>€/mq</th><th>Rend. netto</th><th>Punteggio</th><th>Visita</th></tr>` +
-    c.altri.map(a => `<tr><td>${a.posizione_classifica}</td><td><a href="${esc(a.url)}" target="_blank" rel="noopener">${esc(a.titolo)}</a>
+  $("#altri").innerHTML = `<tr><th></th><th>#</th><th>Annuncio</th><th>Prezzo</th><th>mq</th><th>€/mq</th><th>Rend. netto</th><th>Punteggio</th><th>Visita</th></tr>` +
+    c.altri.map(a => `<tr><td>${likeBtn(a.id)}</td><td>${a.posizione_classifica}</td><td><a href="${esc(a.url)}" target="_blank" rel="noopener">${esc(a.titolo)}</a>
       <div class="small muted">${esc(a.fonte)} · ${esc(a.zona_universitaria)} ${fmt(a.distanza_uni_km)} km</div></td>
       <td>${eur(a.prezzo)}</td><td>${fmt(a.mq)}</td><td>${eur(a.prezzo_mq)}</td><td>${fmt(a.valutazione.rendimento_netto)}%</td>
       <td><b>${fmt(a.valutazione.punteggio)}</b></td>
@@ -218,6 +235,20 @@ function render(){
     `<tr><td>${s.url ? `<a href="${esc(s.url)}" target="_blank" rel="noopener">${esc(s.titolo||s.id)}</a>` : esc(s.id)}</td><td>${esc(s.motivo)}</td></tr>`).join("");
   dock();
 }
+
+function likeBtn(id){
+  const on = !!PREF[id];
+  return `<button class="like ${on ? "on" : ""}" data-like="${esc(id)}" aria-pressed="${on}" title="${on ? "Togli dai preferiti" : "Mi piace"}">${on ? "♥" : "♡"}</button>`;
+}
+document.addEventListener("click", async e => {
+  const b = e.target.closest("[data-like]"); if (!b) return;
+  e.stopPropagation();
+  const id = b.dataset.like, on = !PREF[id], c = D.classifica;
+  const a = [...c.top, ...c.altri].find(x => x.id === id) || PREF[id] || {};
+  PREF = await (await fetch("/api/preferiti", {method: "POST", headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({id, profilo: "studenti", mi_piace: on, annuncio: a})})).json();
+  render();
+});
 
 function emailBadge(id){
   const e = D.email?.[id]; if(!e) return "";
@@ -252,7 +283,7 @@ function card(a){
       <div class="tags">${tags}</div>
     </div>
     <div class="score">
-      <div class="badge"><span class="g chip ${gClass(v.giudizio)}">${esc(v.giudizio)}</span><span class="n num">${fmt(v.punteggio)}</span></div>
+      <div class="badge">${likeBtn(a.id)}<span class="g chip ${gClass(v.giudizio)}">${esc(v.giudizio)}</span><span class="n num">${fmt(v.punteggio)}</span></div>
       <div class="bars">${Object.keys(LABELS).map(k=>`<span>${LABELS[k]}</span><span class="bar"><i style="width:${p[k]}%"></i></span>`).join("")}</div>
       <label class="pick"><input type="checkbox" ${SEL.has(a.id)?"checked":""}> Visita</label>
     </div>
