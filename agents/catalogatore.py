@@ -129,10 +129,19 @@ def contatti(a):
             a.get("telefono_inserzionista") or tel)
 
 
+def da_avviso_email(a):
+    """Annuncio letto da un avviso email (senza descrizione o con un estratto).
+    I dati salvati prima del campo avviso_email: Immobiliare.it arriva solo così."""
+    return a.get("avviso_email", a.get("fonte") == "Immobiliare.it")
+
+
 def duplicati(annunci):
-    """Stesso immobile su più portali: prezzo ±2%, mq ±2, distanza < 400 m."""
+    """Stesso immobile su più portali: prezzo ±2%, mq ±2, distanza < 400 m.
+    Si tiene la versione più completa: prima quelle dai siti (Tecnocasa, poi
+    Casa.it, poi le altre), per ultime quelle dagli avvisi email."""
     tenuti = []
-    for a in sorted(annunci, key=lambda x: (x["fonte"] != "Tecnocasa", x["fonte"] != "Casa.it")):
+    for a in sorted(annunci, key=lambda x: (da_avviso_email(x), x["fonte"] != "Tecnocasa",
+                                            x["fonte"] != "Casa.it")):
         dup = None
         for b in tenuti:
             if (a["prezzo"] and b["prezzo"] and abs(a["prezzo"] - b["prezzo"]) <= 0.02 * b["prezzo"]

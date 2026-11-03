@@ -14,7 +14,7 @@ from datetime import datetime
 from email.message import EmailMessage
 from email.utils import formataddr, formatdate, make_msgid
 
-from . import fonti, fonti_extra
+from . import fonti, fonti_extra, verifiche
 from .catalogatore import duplicati, segnali, stato_norm
 from .common import DATA, haversine_km, http_get, load_config, load_json, log, median, save_json
 from .mailer import smtp_connessione
@@ -141,13 +141,15 @@ def caratteristiche(a):
     testo = f"{a.get('titolo') or ''}\n{a.get('descrizione') or ''}".lower()
     # gli avvisi email non hanno descrizione (Idealista solo un estratto troncato):
     # quello che vi si trova conta, ma l'assenza di salone/cucina non è un'informazione
-    car = {"testo": len(a.get("descrizione") or "") >= 80 and a.get("fonte") not in FONTI_EMAIL}
-    camere = _n(a.get("camere")) or _da_testo(_N + r"\s+(?:ampie\s+|grandi\s+)?camer[ae]", testo)
+    # (salvo che l'utente abbia importato la pagina dell'annuncio: agents/verifiche.py)
+    car = {"testo": len(a.get("descrizione") or "") >= 80
+           and (a.get("fonte") not in FONTI_EMAIL or bool(a.get("verificato")))}
+    camere = _n(a.get("camere")) or _da_testo(_N + r"[ \t]+(?:ampie\s+|grandi\s+)?camer[ae]", testo)
     car["camere_stimate"] = camere is None
     if camere is None and _n(a.get("locali")):
         camere = max(_n(a["locali"]) - 1, 1)  # sugli annunci Tecnocasa: 4 locali ≈ salone + 3 camere
     car["camere"] = camere
-    bagni = _n(a.get("bagni")) or _da_testo(_N + r"\s+(?:bagni|servizi)", testo)
+    bagni = _n(a.get("bagni")) or _da_testo(_N + r"[ \t]+(?:bagni|servizi)", testo)
     if bagni is None and re.search(r"doppi servizi|doppio bagno", testo):
         bagni = 2
     car["bagni"] = bagni
@@ -249,8 +251,10 @@ def run(report=False, solo_valuta=False):
         _raccogli(cfg, f, add)
         save_json("famiglia_grezzi.json", {"per_fonte": per_fonte, "annunci": raccolti})
 
+    importati = load_json(verifiche.FILE, {})
     tenuti, scartati = [], 0
     for a in raccolti:
+        verifiche.applica(a, importati)
         if not (a.get("prezzo") and a.get("mq") and a.get("lat")):
             scartati += 1
             continue

@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Importa annuncio</title>
+<style>
+:root{--bg:#f6f5f1;--surface:#fff;--ink:#1d1d1b;--ink-2:#5c5b56;--line:#e3e0d8;--accent:#1f5f4a;--good:#1f7a4d;--bad:#b23b2e;color-scheme:light}
+@media (prefers-color-scheme:dark){:root{--bg:#141413;--surface:#1d1d1b;--ink:#ecebe6;--ink-2:#aeada6;--line:#33322f;--accent:#5fb393;--good:#6cc596;--bad:#ef7e70;color-scheme:dark}}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+.box{max-width:560px;margin:48px auto;padding:22px 24px;background:var(--surface);border:1px solid var(--line);border-radius:12px}
+h1{font-size:19px;margin:0 0 10px} .ok{color:var(--good)} .err{color:var(--bad)} .muted{color:var(--ink-2);font-size:13px}
+a{color:var(--accent)}
+</style>
+</head>
+<body>
+<div class="box">
+  <h1 id="tit">Importazione in corso…</h1>
+  <div id="msg"></div>
+  <p class="muted"><a href="famiglia.html">Torna alla pagina famiglia</a></p>
+</div>
+<script>
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+(async () => {
+  let d = null;
+  try { d = JSON.parse(decodeURIComponent(location.hash.slice(1))); } catch (e) {}
+  history.replaceState(null, "", location.pathname);  // il testo non resta nella cronologia
+  if (!d) { $("#tit").textContent = "Niente da importare"; $("#msg").innerHTML = `<p class="err">Usa il segnalibro dalla pagina di un annuncio.</p>`; return; }
+  try {
+    const r = await (await fetch("/api/importa", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(d)})).json();
+    if (r.errore) throw new Error(r.errore);
+    const v = x => x ?? "non trovato";
+    $("#tit").innerHTML = `<span class="ok">Annuncio importato</span>`;
+    $("#msg").innerHTML = `<p>${esc(d.t)}</p><p>Camere: <b>${esc(v(r.camere))}</b> · Bagni: <b>${esc(v(r.bagni))}</b> · Locali: <b>${esc(v(r.locali))}</b><br>
+      <span class="muted">Descrizione: ${r.caratteri} caratteri. ${r.ricalcolo ? "Punteggi in ricalcolo: tra qualche secondo la pagina famiglia è aggiornata." : "È in corso una ricerca: i dati verranno usati appena finisce."}</span></p>
+      <p class="muted">Puoi chiudere questa scheda.</p>`;
+  } catch (e) {
+    $("#tit").innerHTML = `<span class="err">Importazione non riuscita</span>`;
+    $("#msg").innerHTML = `<p>${esc(e.message)}</p>`;
+  }
+})();
+</script>
+</body>
+</html>

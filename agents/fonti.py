@@ -533,7 +533,7 @@ def immobiliare_email(cfg, r=None, profilo="studenti"):
             id="immobiliare-" + (ann_id or hashlib.sha1(url.encode()).hexdigest()[:12]),
             fonte="Immobiliare.it", url=url,
             titolo=x["titolo"], indirizzo=x["indirizzo"], prezzo=x["prezzo"],
-            mq=x["mq"], locali=x["locali"], bagni=x["bagni"]))
+            mq=x["mq"], locali=x["locali"], bagni=x["bagni"], avviso_email=True))
     geocode_all(out)
     log(AGENT, f"Immobiliare.it {profilo} (avvisi email ultimi {giorni} giorni): {len(out)} annunci nel range")
     return out
@@ -594,7 +594,7 @@ def casa_email(cfg, r=None, profilo="studenti"):
         out.append(base_record(
             id=f"casa-{x['id']}", fonte="Casa.it", url=f"https://www.casa.it/immobili/{x['id']}/",
             titolo=x["titolo"], indirizzo=x["indirizzo"], prezzo=x["prezzo"], mq=x["mq"],
-            locali=x["locali"], bagni=x["bagni"], box=1 if x["box"] else None))
+            locali=x["locali"], bagni=x["bagni"], box=1 if x["box"] else None, avviso_email=True))
     geocode_all(out)
     log(AGENT, f"Casa.it {profilo} (avvisi email ultimi {giorni} giorni): {len(out)} annunci nel range")
     return out
@@ -735,7 +735,8 @@ def idealista_email_filtra(annunci, r, profilo="studenti"):
             titolo=x["titolo"], descrizione=x["descrizione"], indirizzo=x["indirizzo"],
             prezzo=x["prezzo"], prezzo_precedente=x["prezzo_precedente"], mq=x["mq"],
             locali=x["locali"], bagni=x["bagni"], piano=x["piano"],
-            ascensore=x["ascensore"], asta=x["asta"], box=1 if x["box"] else None))
+            ascensore=x["ascensore"], asta=x["asta"], box=1 if x["box"] else None,
+            avviso_email=True))
     return out
 
 

@@ -25,6 +25,14 @@ Solo ricalcolo:    pulsante "Ricalcola", oppure `python3 run.py --solo-valuta`
   marcate (`asta`) e scartate dal catalogatore. Profilo dalla ricerca salvata: nome con famiglia/family →
   famiglia, studenti/investimento → studenti, altrimenti entrambi.
 
+- **Importa annuncio (segnalibro)**: Casa.it, Idealista e Immobiliare.it bloccano le visite automatiche,
+  quindi i loro annunci da avviso email restano con dati parziali ("da verificare"). In fondo alla pagina
+  famiglia c'è il pulsante *Importa annuncio* da trascinare nei preferiti: aperto un annuncio nel proprio
+  browser, il segnalibro passa testo e dati strutturati della pagina a `importa.html` → `/api/importa`
+  (`agents/verifiche.py`, salvati in `data/verifiche.json`) e la valutazione famiglia si ricalcola.
+- **Doppioni**: tra più versioni dello stesso immobile si tiene quella da un sito (Tecnocasa, poi Casa.it,
+  poi le altre); quelle dagli avvisi email (`avviso_email`) solo se non ce n'è un'altra.
+
 ## Test
 `python3 -m unittest discover -s tests -t . -v` (solo libreria standard, senza rete: le email di esempio sono in `tests/dati/`).
 

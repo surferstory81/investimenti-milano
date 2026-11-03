@@ -5,7 +5,7 @@ import threading
 import traceback
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 
-from agents import famiglia, mailer
+from agents import famiglia, mailer, verifiche
 from agents.common import DATA, ROOT, load_config, load_json, log, save_json
 from run import pipeline
 
@@ -80,6 +80,15 @@ class Handler(SimpleHTTPRequestHandler):
                 threading.Thread(target=_pipeline_bg, daemon=True,
                                  args=(False, lambda: famiglia.run(solo_valuta=solo))).start()
                 return self._json({"ok": True})
+            if self.path == "/api/importa":
+                # testo di un annuncio aperto dall'utente nel suo browser (segnalibro)
+                v = verifiche.importa(b)
+                ricalcolo = not STATO["in_corso"]
+                if ricalcolo:
+                    threading.Thread(target=_pipeline_bg, daemon=True,
+                                     args=(False, lambda: famiglia.run(solo_valuta=True))).start()
+                return self._json({"ok": True, "id": v["id"], "camere": v["camere"], "bagni": v["bagni"],
+                                   "locali": v["locali"], "caratteri": len(v["testo"]), "ricalcolo": ricalcolo})
             if self.path == "/api/selezione":
                 save_json("selezione.json", list(dict.fromkeys(b.get("ids", []))))
                 return self._json({"ok": True})
@@ -89,6 +98,8 @@ class Handler(SimpleHTTPRequestHandler):
                 if b.get("conferma") is not True:
                     return self._json({"errore": "conferma mancante"}, 400)
                 return self._json(mailer.invia(b.get("bozze", [])))
+        except ValueError as e:
+            return self._json({"errore": str(e)}, 400)
         except Exception as e:
             return self._json({"errore": str(e)}, 500)
         return self._json({"errore": "endpoint sconosciuto"}, 404)
