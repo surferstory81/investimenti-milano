@@ -13,7 +13,9 @@ PHONE_RE = re.compile(r"(?:\+39[\s.]?)?(?:0\d{1,3}|3\d{2})[\s./-]?\d{2,4}[\s./-]
 # (regex, etichetta, gravità: "esclusione" | "attenzione" | "positivo")
 SEGNALI = [
     (r"\bnuda propriet", "Nuda proprietà", "esclusione"),
-    (r"\basta\b|aste giudiziarie|vendita giudiziaria|tribunale", "Asta giudiziaria", "esclusione"),
+    # "tribunale" da solo no: "a pochi passi dal Tribunale di Milano" è una posizione
+    (r"\basta\b|aste giudiziarie|vendita giudiziaria|procedura esecutiva|esecuzione immobiliare|"
+     r"custode giudiziario|professionista delegato|\br\.\s?g\.\s?e\.", "Asta giudiziaria", "esclusione"),
     (r"\busufrutto\b", "Usufrutto", "esclusione"),
     (r"\bin affitto\b.*\bproponiamo in locazione\b|\bsolo affitto\b", "Annuncio d'affitto", "esclusione"),
         (r"seminterrat|\bpiano -1\b|interrato", "Seminterrato", "attenzione"),

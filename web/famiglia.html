@@ -66,6 +66,10 @@ header{display:flex;flex-wrap:wrap;gap:16px;justify-content:space-between;align-
 .scarta{appearance:none;border:0;background:none;cursor:pointer;font-size:13px;line-height:1;padding:2px 4px;color:var(--ink-3)}
 .scarta:hover{color:var(--bad)}
 .giudizio{display:inline-flex;gap:6px;align-items:center}
+.card.todo{border-left:4px solid var(--bad)}
+.todo-box{display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center;background:var(--bad-soft);color:var(--ink);
+  border-radius:var(--radius);padding:12px 14px;margin-bottom:14px;font-size:13.5px}
+.todo-box b{color:var(--bad)}
 @media (max-width:760px){
   .card{grid-template-columns:30px 1fr 56px}
   .card .thumb{display:none}
@@ -95,6 +99,10 @@ header{display:flex;flex-wrap:wrap;gap:16px;justify-content:space-between;align-
     poi i requisiti — 3+ camere, 2 bagni, salone, cucina abitabile, piano intermedio o alto (dal 2°) (in giallo se mancano o non risultano dall'annuncio) —,
     i plus per i bambini in blu (piscina, area giochi/campi, spazi comuni attrezzati) e gli altri plus in verde
     (terrazzo, balcone, box, aria condizionata, domotica, ristrutturato). Contano anche prezzo al mq e metratura.</p>
+  <div class="todo-box" id="todoBox" hidden>
+    <span><b id="todoN"></b> <span id="todoTxt"></span></span>
+    <button class="btn" id="todoBtn"></button>
+  </div>
   <div class="filters">
     <label>Zona <select id="fZona"><option value="">Tutte</option><option>Centro</option><option>Semicentro</option><option>Periferia Milano</option><option>Cintura</option></select></label>
     <label>Comune <select id="fComune"><option value="">Tutti</option></select></label>
@@ -106,11 +114,10 @@ header{display:flex;flex-wrap:wrap;gap:16px;justify-content:space-between;align-
     <label><input type="checkbox" id="fReq"> Solo con tutti i requisiti</label>
     <label><input type="checkbox" id="fNuovi"> Solo nuovi oggi</label>
     <label><input type="checkbox" id="fPref"> Solo preferiti <span id="nPref" class="muted"></span></label>
+    <label title="Annunci dagli avvisi email senza descrizione: aprili e clicca il segnalibro"><input type="checkbox" id="fTodo"> Solo da importare <span id="nTodo" class="muted"></span></label>
     <span class="muted" id="fCount"></span>
   </div>
   <div id="list"></div>
-  <h2 id="avvisiTit" hidden>Dagli avvisi email <span class="muted small">· Immobiliare.it, Casa.it e Idealista: descrizione assente o parziale, salone, cucina e plus sono da verificare sull'annuncio</span></h2>
-  <div id="avvisi"></div>
   <details id="scartBox" hidden style="margin-top:28px"><summary id="scartSum">Scartati da te</summary><div id="scartList" style="margin-top:10px"></div></details>
   <h2>Importa un annuncio</h2>
   <p class="muted small" style="max-width:760px">Casa.it, Idealista e Immobiliare.it non si aprono in automatico.
@@ -123,6 +130,7 @@ const $ = s => document.querySelector(s);
 const eur = n => n == null ? "—" : new Intl.NumberFormat("it-IT",{style:"currency",currency:"EUR",maximumFractionDigits:0}).format(n);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const dt = s => s ? new Date(s).toLocaleString("it-IT",{dateStyle:"medium",timeStyle:"short"}) : "—";
+const FONTI_EMAIL = ["Immobiliare.it", "Casa.it", "Idealista"];
 let D = null, wasRunning = false, G = {};  // giudizi famiglia: {id: {stato: mi_piace|scartato, ...}}
 const statoDi = id => G[id]?.stato;
 
@@ -131,6 +139,12 @@ function pref(k, v){ try{ if(v===undefined) return localStorage.getItem("fam_"+k
 async function load(){
   const [d, pr] = await Promise.all([fetch("/api/famiglia").then(r => r.json()), fetch("/api/preferiti").then(r => r.json())]);
   D = d; G = soloFamiglia(pr);
+  if (D) {
+    // tutti gli annunci (gli avvisi oltre il limite della classifica compresi), segnati se da importare
+    const visti = new Set([...D.top, ...D.altri].map(a => a.id));
+    D.tutti = [...D.top, ...D.altri, ...(D.avvisi||[]).filter(a => !visti.has(a.id))];
+    D.tutti.forEach(a => { a.da_importare ??= FONTI_EMAIL.includes(a.fonte) && !a.verificato; });
+  }
   if(!D){ $("#list").innerHTML = `<div class="empty">Nessun dato ancora. Premi <b>Nuova ricerca</b>.</div>`; $("#sub").textContent=""; return; }
   $("#sub").textContent = `Aggiornato ${dt(D.aggiornato)} · ${D.totale_valutati} appartamenti valutati`;
   $("#sources").innerHTML = Object.entries(D.per_fonte||{}).map(([k,v]) =>
@@ -156,9 +170,17 @@ function render(){
   const pianoOk = a => pmin === null || !a.piano_classe || LIV[a.piano_classe] >= pmin;
   const ok = a => (!zn || a.zona === zn) && (!com || a.comune === com) && (!qr || a.zona_scelta === qr) && a.prezzo <= pmax &&
     statoDi(a.id) !== "scartato" && pianoOk(a) && (!$("#fPref").checked || statoDi(a.id) === "mi_piace") &&
-    (!$("#fNuovi").checked || (a.prima_vista||"").slice(0,10) === oggi);
-  const all = [...D.top, ...D.altri].filter(a => ok(a) && (!$("#fReq").checked || !a.mancano.length));
+    (!$("#fNuovi").checked || (a.prima_vista||"").slice(0,10) === oggi) && (!$("#fTodo").checked || a.da_importare);
+  const all = D.tutti.filter(a => ok(a) && (!$("#fReq").checked || !a.mancano.length));
   $("#fCount").textContent = `${all.length} risultati`;
+  // da importare: conteggio su tutti gli annunci non scartati, non solo su quelli filtrati
+  const todo = D.tutti.filter(a => a.da_importare && statoDi(a.id) !== "scartato").length;
+  $("#nTodo").textContent = todo ? `(${todo})` : "";
+  $("#todoBox").hidden = !todo && !$("#fTodo").checked;
+  $("#todoN").textContent = todo ? `${todo} ${todo === 1 ? "annuncio" : "annunci"}` : "Nessun annuncio";
+  $("#todoTxt").textContent = todo ? `dagli avvisi email ${todo === 1 ? "è" : "sono"} ancora senza descrizione (bordo rosso): ` +
+    `aprili, aspetta che la pagina sia caricata e clicca il segnalibro "Importa annuncio".` : "da importare: hai completato tutto.";
+  $("#todoBtn").textContent = $("#fTodo").checked ? "Mostra tutti" : "Mostra solo questi";
   const nLike = Object.values(G).filter(g => g.stato === "mi_piace").length;
   $("#nPref").textContent = nLike ? `(${nLike})` : "";
   const scart = Object.entries(G).filter(([, g]) => g.stato === "scartato");
@@ -168,9 +190,6 @@ function render(){
     <button class="btn" style="padding:3px 9px" data-id="${esc(id)}" data-giudizio="scartato">Ripristina</button>
     <a href="${esc(g.url)}" target="_blank" rel="noopener">${esc(g.titolo || id)}</a> <span class="muted">· ${eur(g.prezzo)}</span></div>`).join("");
   $("#list").innerHTML = all.length ? all.map((a,i) => card(a, i+1, oggi)).join("") : `<div class="empty">Nessun risultato con questi filtri.</div>`;
-  const av = (D.avvisi||[]).filter(ok);
-  $("#avvisiTit").hidden = !av.length;
-  $("#avvisi").innerHTML = av.map((a,i) => card(a, i+1, oggi)).join("");
 }
 
 function card(a, i, oggi){
@@ -178,6 +197,7 @@ function card(a, i, oggi){
   const storico = a.prezzi_storico || [];
   const calo = storico.length > 1 && storico[0].prezzo > a.prezzo ? Math.round(100*(1 - a.prezzo/storico[0].prezzo)) : 0;
   const tags = [
+    ...(a.da_importare ? [`<span class="chip bad" title="Dall'avviso email: camere, salone e cucina non si conoscono">senza dati: apri e importa</span>`] : []),
     ...((a.prima_vista||"").slice(0,10) === oggi ? [`<span class="chip good">Nuovo</span>`] : []),
     ...(a.plus_bimbi||[]).map(p => `<span class="chip kid">${esc(p)}</span>`),
     ...a.plus.map(p => `<span class="chip good">${esc(p)}</span>`),
@@ -191,7 +211,7 @@ function card(a, i, oggi){
       `<span class="chip ${s.tipo === "attenzione" ? "warn" : s.tipo === "esclusione" ? "bad" : "good"}">${esc(s.etichetta)}</span>`),
   ].join("");
   const altre = (a.altre_fonti||[]).map(o => `<a href="${esc(o.url)}" target="_blank" rel="noopener">${esc(o.fonte)}</a>`).join("");
-  return `<div class="card">
+  return `<div class="card${a.da_importare ? " todo" : ""}">
     <div class="rank">${i}</div>
     <a href="${esc(a.url)}" target="_blank" rel="noopener">${a.immagini?.[0] ? `<img class="thumb" loading="lazy" src="${esc(a.immagini[0])}" alt="">` : `<div class="thumb"></div>`}</a>
     <div>
@@ -212,7 +232,7 @@ function card(a, i, oggi){
   </div>`;
 }
 
-["#fZona","#fComune","#fQuartiere","#fPiano","#fPrezzo","#fReq","#fNuovi","#fPref"].forEach(s => $(s).addEventListener("input", () => {
+["#fZona","#fComune","#fQuartiere","#fPiano","#fPrezzo","#fReq","#fNuovi","#fPref","#fTodo"].forEach(s => $(s).addEventListener("input", () => {
   pref("comune", $("#fComune").value); pref("quartiere", $("#fQuartiere").value); pref("piano", $("#fPiano").value); render(); }));
 
 async function run(solo){
@@ -258,6 +278,16 @@ $("#bookmarklet").href = "javascript:" + encodeURIComponent(`(()=>{const m=docum
   `const d={u:location.href,t:document.title,x:m.innerText.slice(0,40000),j:j.slice(0,20000)};` +
   `window.open(${JSON.stringify(location.origin + "/importa.html#")}+encodeURIComponent(JSON.stringify(d)),"_blank")})()`);
 $("#bookmarklet").onclick = e => { e.preventDefault(); alert("Trascinalo nella barra dei preferiti, poi usalo sulla pagina di un annuncio."); };
+$("#todoBtn").onclick = () => { $("#fTodo").checked = !$("#fTodo").checked; render(); };
+// dopo un'importazione (nella scheda aperta dal segnalibro) la classifica si ricalcola:
+// tornando su questa scheda si ricaricano i dati se sono cambiati
+document.addEventListener("visibilitychange", async () => {
+  if (document.visibilityState !== "visible" || !D) return;
+  const s = await (await fetch("/api/stato")).json();
+  if (s.in_corso) { poll(); return; }
+  const d = await (await fetch("/api/famiglia")).json();
+  if (d && d.aggiornato !== D.aggiornato) load();
+});
 load(); poll();
 </script>
 </body>

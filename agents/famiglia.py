@@ -322,7 +322,10 @@ def run(report=False, solo_valuta=False):
     tenuti = [a for a in tenuti if a["id"] not in scartati_utente]
     preferiti.aggiorna("famiglia", tenuti)
     n = f.get("top", 30)
-    avvisi = [a for a in tenuti if a["fonte"] in FONTI_EMAIL]
+    # dagli avvisi email senza descrizione: si completano col segnalibro "Importa annuncio"
+    for a in tenuti:
+        a["da_importare"] = a["fonte"] in FONTI_EMAIL and not a.get("verificato")
+    avvisi = [a for a in tenuti if a["da_importare"]]
     save_json("famiglia.json", {"aggiornato": now, "per_fonte": per_fonte,
                                 "totale_valutati": len(tenuti), "scartati": scartati,
                                 "top": tenuti[:n], "altri": tenuti[n:n + 300], "avvisi": avvisi})
